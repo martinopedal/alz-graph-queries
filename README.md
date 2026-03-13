@@ -59,9 +59,9 @@ Connect-AzAccount -TenantId "<your-tenant-id>"
 ### Output
 
 The script produces:
-- **Console summary** — OK / Empty / Error counts per category
-- **validation_results.csv** — Full results with status, row count, and error messages
-- **validation_results_not_queryable.csv** — Items that cannot be validated via ARG (with reasons)
+- **Console summary** - OK / Empty / Error counts per category
+- **validation_results.csv** - Full results with status, row count, and error messages
+- **validation_results_not_queryable.csv** - Items that cannot be validated via ARG (with reasons)
 
 ### Interpreting results
 
@@ -92,4 +92,4 @@ To use these queries with the existing Excel workflow:
 
 ## License
 
-MIT — these queries are provided as-is for assessment purposes.
+MIT - these queries are provided as-is for assessment purposes.
