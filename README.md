@@ -90,6 +90,13 @@ To use these queries with the existing Excel workflow:
 3. Match results by GUID to update the Comments/Status columns
 4. Or use the `checklist_graph.sh` script with a modified checklist JSON that includes these additional queries
 
+## Automation
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `ci-failure-analysis.yml` | Any workflow failure | Opens issue with logs, labels `bug` + `squad` |
+| `squad-heartbeat.yml` | Schedule (30 min) | Ralph triage pass |
+
 ## License
 
 MIT - these queries are provided as-is for assessment purposes.
