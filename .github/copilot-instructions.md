@@ -13,6 +13,18 @@ Queries live in `queries/alz_additional_queries.json` — each item has a `query
 - ✅ PowerShell scripts handle validation and reporting
 - ✅ Run `Validate-Queries.ps1` before committing new queries
 
+## Documentation rules — ALWAYS required
+
+Every PR that changes code, queries, or configuration MUST include a docs update in the same commit:
+
+- ✅ `README.md` — update query counts, coverage %, and feature list if changed
+- ✅ `PERMISSIONS.md` — update if new Azure/Graph/GitHub API scopes are added
+- ✅ `CHANGELOG.md` — add an entry for every user-visible change (feature, fix, breaking)
+- ✅ Inline comments in new PowerShell modules if the logic is non-obvious
+- ✅ If a query is converted from not-queryable to queryable, update the description in `alz_additional_queries.json`
+
+**No code PR merges without a matching docs update. This is not optional.**
+
 ## Quality Rules
 
 - ✅ All KQL must be valid Azure Resource Graph syntax
@@ -30,6 +42,7 @@ Queries live in `queries/alz_additional_queries.json` — each item has a `query
 ## Branch protection policy (solo contributor repos)
 
 - ✅ PRs required for all changes to main — no direct push
+- ✅ Every PR description must include a docs section listing what was updated
 - ✅ No force push, linear history enforced
 - ✅ 0 required reviewers — solo repo, CI passing is the gate
 - ❌ Signed commits NOT required — breaks Dependabot and GitHub API commits; remove if accidentally re-added

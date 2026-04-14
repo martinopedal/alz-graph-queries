@@ -15,7 +15,7 @@ on:
   issues:
     types: [closed, labeled]
   pull_request:
-    types: [closed]
+    types: [opened, synchronize, reopened, closed]
 
   # Manual trigger
   workflow_dispatch:
