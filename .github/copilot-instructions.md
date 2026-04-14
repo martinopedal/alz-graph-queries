@@ -26,3 +26,10 @@ Queries live in `queries/alz_additional_queries.json` — each item has a `query
 - ✅ All GitHub Actions `uses:` must be pinned to a commit SHA, not a tag
 - ✅ Add `persist-credentials: false` to every `actions/checkout` step
 - ✅ Never commit secrets or credentials
+
+## Branch protection policy (solo contributor repos)
+
+- ✅ PRs required for all changes to main — no direct push
+- ✅ No force push, linear history enforced
+- ✅ 0 required reviewers — solo repo, CI passing is the gate
+- ❌ Signed commits NOT required — breaks Dependabot and GitHub API commits; remove if accidentally re-added
