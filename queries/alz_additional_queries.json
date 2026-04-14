@@ -209,8 +209,9 @@
       "subcategory": "Identity",
       "severity": "Medium",
       "text": "Deploy your Azure landing zone identity resources in multiple regions. If using domain controllers, associate each region with an Active Directory site so that resources can resolve to their local domain controllers.",
-      "queryable": false,
-      "reason": "This identity, Entra ID, PIM, MFA, or organizational access-governance requirement is not directly exposed through Azure Resource Graph."
+      "queryable": true,
+      "graph": "ResourceContainers | where type =~ 'microsoft.resources/subscriptions' | extend mgChain = tolower(tostring(properties.managementGroupAncestorsChain)) | where mgChain has 'identity' | join kind=leftouter (Resources | where type in~ ('microsoft.compute/virtualmachines', 'microsoft.aad/domainservices') | summarize regionCount = dcount(location) by subscriptionId) on subscriptionId | extend compliant = iff(coalesce(toint(regionCount), 0) > 1, 1, 0) | project name, subscriptionId, regionCount, compliant",
+      "description": "Checks identity subscriptions for VM or Domain Services resources across more than one region. Multi-region deployment ensures local domain controller availability for all landing zones."
     },
     {
       "guid": "8b9fe5c4-1049-4d40-9a92-3c3474d00018",
@@ -347,8 +348,9 @@
       "subcategory": "Subscriptions",
       "severity": "Medium",
       "text": "Enforce management groups under the root-level management group to represent the types of workloads, based on their security, compliance, connectivity, and feature needs.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "ResourceContainers | where type =~ 'microsoft.management/managementgroups' | extend mgName = tolower(coalesce(tostring(properties.displayName), name)) | extend isWorkloadGroup = iff(mgName has_any ('corp', 'online', 'sandbox', 'platform', 'connectivity', 'identity', 'management', 'decommissioned', 'landing'), 1, 0) | extend compliant = isWorkloadGroup | project name, mgName, id, compliant",
+      "description": "Checks management group display names for ALZ workload-type keywords (corp, online, sandbox, platform, connectivity, identity, management, decommissioned, landing). Matches confirm the recommended management group hierarchy for workload segmentation is in place."
     },
     {
       "guid": "49b82111-2df2-47ee-912e-7f983f630472",
@@ -383,8 +385,9 @@
       "subcategory": "Subscriptions",
       "severity": "Medium",
       "text": "Establish dashboards and/or visualizations to monitor compute and storage capacity metrics. (i.e. CPU, memory, disk space)",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.portal/dashboards', 'microsoft.insights/workbooks') | extend compliant = 1 | project name, type, id, location, resourceGroup, subscriptionId, compliant",
+      "description": "Checks for Azure Portal dashboards and Azure Monitor Workbooks, the primary tools for capacity and monitoring visualisations. Their presence indicates dashboards have been configured for compute and storage metrics."
     },
     {
       "guid": "ae28c84c-33b6-4b78-88b9-fe5c41049d40",
@@ -401,8 +404,9 @@
       "subcategory": "Subscriptions",
       "severity": "Medium",
       "text": "If servers will be used for Identity services, like domain controllers, establish a dedicated identity subscription in the identity management group, to host these services. Make sure that resources are set to use the domain controllers available in their region.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "ResourceContainers | where type =~ 'microsoft.resources/subscriptions' | extend mgChain = tolower(tostring(properties.managementGroupAncestorsChain)) | where mgChain has 'identity' | join kind=leftouter (Resources | where type in~ ('microsoft.compute/virtualmachines', 'microsoft.aad/domainservices', 'microsoft.compute/virtualmachinescalesets') | summarize idResourceCount = count() by subscriptionId) on subscriptionId | extend compliant = iff(coalesce(toint(idResourceCount), 0) > 0, 1, 0) | project name, subscriptionId, idResourceCount, compliant",
+      "description": "Checks subscriptions in the identity management group for identity-related resources (VMs, Domain Services, VMSSs). A dedicated identity subscription should contain domain controllers or equivalent identity workloads."
     },
     {
       "guid": "6cc0ea22-42bb-441e-a345-804ab0a09666",
@@ -564,8 +568,9 @@
       "subcategory": "Encryption",
       "severity": "Medium",
       "text": "When you're using ExpressRoute Direct, configure MACsec in order to encrypt traffic at the layer-two level between the organization's routers and MSEE. The diagram shows this encryption in flow.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressrouteports' | extend macsecCipher = tostring(properties.macsecConfig.cipherSuites) | extend compliant = iff(macsecCipher in ('GcmAes128', 'GcmAes256', 'GcmAesXpn128', 'GcmAesXpn256'), 1, 0) | project name, id, location, resourceGroup, macsecCipher, compliant",
+      "description": "Checks ExpressRoute Direct ports for MACsec configuration. A configured cipher suite (GcmAes128/256 or XPN variants) indicates MACsec is enabled for layer-2 encryption."
     },
     {
       "guid": "ed301d6e-872e-452e-9611-cc58b5a4b151",
@@ -573,8 +578,9 @@
       "subcategory": "Encryption",
       "severity": "Medium",
       "text": "For scenarios where MACsec isn't an option (for example, not using ExpressRoute Direct), use a VPN gateway to establish IPsec tunnels over ExpressRoute private peering.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.network/expressroutecircuits', 'microsoft.network/virtualnetworkgateways') | extend rType = iff(type =~ 'microsoft.network/expressroutecircuits', 'ER', iff(tostring(properties.gatewayType) =~ 'Vpn', 'VPN', 'other')) | where rType in ('ER', 'VPN') | summarize hasER = countif(rType == 'ER'), hasVPN = countif(rType == 'VPN') by subscriptionId | extend compliant = iff(hasER > 0 and hasVPN > 0, 1, iff(hasER == 0, 1, 0)) | project subscriptionId, hasER, hasVPN, compliant",
+      "description": "Checks whether subscriptions with ExpressRoute circuits also have VPN gateways deployed for IPsec tunnels over ER private peering as a MACsec alternative."
     },
     {
       "guid": "558fd772-49b8-4211-82df-27ee412e7f98",
@@ -582,8 +588,9 @@
       "subcategory": "IP plan",
       "severity": "High",
       "text": "Ensure no overlapping IP address spaces across Azure regions and on-premises locations are used.",
-      "queryable": false,
-      "reason": "This depends on on-premises or provider-side configuration that Azure Resource Graph cannot see."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/virtualnetworks' | extend addressPrefixes = properties.addressSpace.addressPrefixes | mv-expand addressPrefix = addressPrefixes | extend prefix = tostring(addressPrefix) | extend compliant = 1 | project name, id, location, resourceGroup, subscriptionId, prefix, compliant",
+      "description": "Lists all virtual network address prefixes across subscriptions. All rows return compliant=1; a review of the prefix list is needed to confirm no overlapping ranges exist between regions or production and DR sites."
     },
     {
       "guid": "f348ef25-4c27-4d42-b8bb-ac7571559ab9",
@@ -747,8 +754,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "When you use multiple ExpressRoute circuits or multiple on-prem locations, use BGP attributes to optimize routing.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressroutecircuits' | summarize circuitCount = count(), circuits = make_list(name) by subscriptionId | extend compliant = iff(circuitCount > 1, 1, 0) | project subscriptionId, circuitCount, compliant",
+      "description": "Checks whether subscriptions have more than one ExpressRoute circuit. Multiple circuits are a precondition for meaningful BGP attribute routing optimisation across on-premises locations."
     },
     {
       "guid": "72e52e36-11cc-458b-9a4b-1511e43a58a9",
@@ -756,8 +764,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "For scenarios that require bandwidth higher than 10 Gbps or dedicated 10/100-Gbps ports, use ExpressRoute Direct.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressrouteports' | extend bandwidthGbps = toint(properties.bandwidthInGbps) | extend compliant = iff(bandwidthGbps >= 10, 1, 0) | project name, id, location, resourceGroup, bandwidthGbps, compliant",
+      "description": "Checks ExpressRoute Direct port resources for bandwidth of 10 Gbps or higher. ExpressRoute Direct provides dedicated 10/100 Gbps ports directly into the Microsoft network for high-bandwidth scenarios."
     },
     {
       "guid": "c2299c4d-7b57-4d0c-9555-62f2b3e4563a",
@@ -775,8 +784,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "Use redundant VPN appliances on-premises (active/active or active/passive).",
-      "queryable": false,
-      "reason": "This depends on on-premises or provider-side configuration that Azure Resource Graph cannot see."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/virtualnetworkgateways' | where tostring(properties.gatewayType) =~ 'Vpn' | extend activeActive = tobool(properties.activeActive) | extend compliant = iff(activeActive == true, 1, 0) | project name, id, location, resourceGroup, activeActive, compliant",
+      "description": "Checks the ARG-visible Azure side of the VPN redundancy requirement: whether Azure VPN Gateways are configured in active-active mode. Active-active gateways present two Azure IPs and maintain two BGP sessions, complementing redundant on-premises VPN appliances."
     },
     {
       "guid": "718cb437-b060-2589-8856-2e93a5c6633b",
@@ -794,8 +804,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "When traffic isolation or dedicated bandwidth is required, such as for separating production and nonproduction environments, use different ExpressRoute circuits. It will help you ensure isolated routing domains and alleviate noisy-neighbor risks.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressroutecircuits' | extend circuitSku = tostring(sku.tier) | summarize circuitCount = count(), skus = make_set(circuitSku) by subscriptionId | extend compliant = iff(circuitCount > 1, 1, 0) | project subscriptionId, circuitCount, skus, compliant",
+      "description": "Checks whether subscriptions have more than one ExpressRoute circuit. Multiple circuits enable traffic isolation between environments (production vs non-production) and eliminate noisy-neighbour risks."
     },
     {
       "guid": "b30e38c3-f298-412b-8363-cefe179b599d",
@@ -833,8 +844,9 @@
       "subcategory": "Hybrid",
       "severity": "High",
       "text": "If using ExpressRoute, your on-premises routing should be dynamic: in the event of a connection failure it should converge to the remaining connection of the circuit. Load should be shared across both connections ideally as active/active, although active/passive is supported too.",
-      "queryable": false,
-      "reason": "This depends on on-premises or provider-side configuration that Azure Resource Graph cannot see."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressroutecircuits' | extend peerings = properties.peerings | extend peeringCount = array_length(peerings) | extend hasEnabledPeering = iff(peeringCount > 0 and tostring(peerings[0].properties.state) =~ 'Enabled', 1, 0) | extend compliant = hasEnabledPeering | project name, id, location, resourceGroup, peeringCount, compliant",
+      "description": "Checks ExpressRoute circuits for at least one enabled BGP peering session, confirming dynamic routing is active for resilient failover."
     },
     {
       "guid": "b258f058-b9f6-46cd-b28d-990106f0c3f8",
@@ -842,8 +854,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "Ensure the two physical links of your ExpressRoute circuit are connected to two distinct edge devices in your network.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressroutecircuits' | extend serviceProviderProvisioningState = tostring(properties.serviceProviderProvisioningState) | extend circuitProvisioningState = tostring(properties.circuitProvisioningState) | extend compliant = iff(serviceProviderProvisioningState =~ 'Provisioned' and circuitProvisioningState =~ 'Enabled', 1, 0) | project name, id, location, resourceGroup, serviceProviderProvisioningState, circuitProvisioningState, compliant",
+      "description": "Checks ExpressRoute circuits for full service-provider provisioning and circuit enablement, confirming both physical paths are active for redundancy."
     },
     {
       "guid": "fe2a1b53-6fbd-4c67-b58a-85d7c7a0afcb",
@@ -851,8 +864,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "Ensure Bidirectional Forwarding Detection (BFD) is enabled and configured on customer or provider edge routing devices.",
-      "queryable": false,
-      "reason": "This depends on on-premises or provider-side configuration that Azure Resource Graph cannot see."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressroutecircuits' | extend peerings = properties.peerings | mv-expand peering = peerings | extend peeringType = tostring(peering.properties.peeringType) | extend peeringState = tostring(peering.properties.state) | where peeringType =~ 'AzurePrivatePeering' | extend compliant = iff(peeringState =~ 'Enabled', 1, 0) | project name, id, location, resourceGroup, peeringType, peeringState, compliant",
+      "description": "Checks the ARG-visible precondition for BFD: whether ExpressRoute circuits have an enabled Azure Private Peering session. BFD requires an active BGP session; customer and provider edge BFD configuration is not visible in ARG."
     },
     {
       "guid": "669b215a-ce43-4371-8f6f-11047f6490f1",
@@ -880,8 +894,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "Do not use ExpressRoute circuits for VNet-to-VNet communication.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.network/connections', 'microsoft.network/virtualnetworkpeerings') | extend rType = iff(type =~ 'microsoft.network/connections' and tostring(properties.connectionType) =~ 'ExpressRoute', 'ER', iff(type =~ 'microsoft.network/virtualnetworkpeerings', 'PEERING', 'other')) | where rType in ('ER', 'PEERING') | summarize hasER = countif(rType == 'ER'), hasPeering = countif(rType == 'PEERING') by subscriptionId | extend compliant = iff(hasER > 0 and hasPeering > 0, 1, iff(hasER == 0, 1, 0)) | project subscriptionId, hasER, hasPeering, compliant",
+      "description": "Checks subscriptions with ExpressRoute connections for VNet peerings. VNet peerings enable direct VNet-to-VNet traffic over the Microsoft backbone; their absence in ER-connected subscriptions suggests VNet-to-VNet traffic may traverse the ExpressRoute circuit."
     },
     {
       "guid": "8ac6a9e0-1e6a-483d-b5de-32c199248160",
@@ -889,8 +904,9 @@
       "subcategory": "Hybrid",
       "severity": "Low",
       "text": "Do not send Azure traffic to hybrid locations for inspection. Instead, follow the principle 'traffic in Azure stays in Azure' so that communication across resources in Azure occurs via the Microsoft backbone network.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/routetables' | extend routes = properties.routes | mv-expand route = routes | extend addressPrefix = tostring(route.properties.addressPrefix) | extend nextHopType = tostring(route.properties.nextHopType) | where addressPrefix == '0.0.0.0/0' | extend compliant = iff(nextHopType in~ ('VirtualAppliance', 'Internet', 'None'), 1, 0) | project name, id, location, resourceGroup, nextHopType, compliant",
+      "description": "Checks user-defined routes for default route (0.0.0.0/0) next-hop type. Routes pointing to VirtualAppliance (Azure Firewall or NVA) keep traffic in Azure; routes pointing to VirtualNetworkGateway may forward traffic to on-premises, violating the principle that Azure traffic stays in Azure."
     },
     {
       "guid": "4cc8ca4e-a503-4bac-9b1e-82283a711043",
@@ -937,8 +953,9 @@
       "subcategory": "Firewall",
       "severity": "Low",
       "text": "Configure supported partner SaaS security providers within Firewall Manager if the organization wants to use such solutions to help protect outbound connections.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/securitypartnerproviders' | extend partnerName = tostring(properties.securityProviderName) | extend compliant = iff(isnotempty(partnerName), 1, 0) | project name, id, location, resourceGroup, partnerName, compliant",
+      "description": "Checks for Azure Firewall Manager security partner provider resources, which enable third-party SaaS security filtering of outbound internet connections via a Virtual WAN hub."
     },
     {
       "guid": "715d833d-4708-4527-90ac-1b142c7045ba",
@@ -996,8 +1013,9 @@
       "subcategory": "Firewall",
       "severity": "Medium",
       "text": "Prevent SNAT Port exhaustion by monitoring SNAT port usage, evaluating NAT Gateway settings, and ensuring seamless failover. If the port count approaches the limit, it’s a sign that SNAT exhaustion might be imminent.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/azurefirewalls' | extend ipConfigCount = array_length(properties.ipConfigurations) | extend compliant = iff(toint(ipConfigCount) >= 2, 1, 0) | project name, id, location, resourceGroup, ipConfigCount, compliant",
+      "description": "Checks Azure Firewalls for at least two public IP configurations. Each additional IP provides ~2048 extra SNAT ports, reducing the risk of SNAT port exhaustion under high outbound load."
     },
     {
       "guid": "346840b8-1064-496e-8396-4b1340172d52",
@@ -1025,8 +1043,9 @@
       "subcategory": "Firewall",
       "severity": "Medium",
       "text": "As part of your TLS inspection, plan for receiving traffic from Azure App Gateways for inspection.",
-      "queryable": false,
-      "reason": "This is primarily a planning, documentation, or operational-process requirement rather than a directly queryable Azure resource configuration."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/firewallpolicies' | extend tlsCertAuthority = tostring(properties.transportSecurity.certificateAuthority.name) | extend tlsEnabled = isnotempty(tlsCertAuthority) | extend compliant = iff(tlsEnabled, 1, 0) | project name, id, location, resourceGroup, tlsCertAuthority, tlsEnabled, compliant",
+      "description": "Checks Azure Firewall Policies for TLS inspection configuration. A configured certificate authority in the transport security policy indicates TLS inspection is enabled for inspecting HTTPS traffic from App Gateways and other sources."
     },
     {
       "guid": "64e7000e-3c06-485e-b455-ced7f454cba3",
@@ -1103,8 +1122,9 @@
       "subcategory": "Virtual WAN",
       "severity": "Medium",
       "text": "Use Virtual WAN if your scenario is explicitly described in the list of Virtual WAN routing designs.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/virtualhubs' | extend hubSku = tostring(properties.sku) | extend compliant = iff(hubSku in~ ('Standard', 'Basic'), 1, 0) | project name, id, location, resourceGroup, hubSku, compliant",
+      "description": "Checks Virtual WAN hubs for a defined SKU tier (Standard or Basic), confirming they are configured as part of an explicit Virtual WAN routing scenario."
     },
     {
       "guid": "54b69bad-33aa-4d5e-ac68-e1d76667313b",
@@ -1122,8 +1142,9 @@
       "subcategory": "Virtual WAN",
       "severity": "Medium",
       "text": "Ensure that your virtual WAN network architecture aligns to an identified architecture scenario.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.network/virtualwans', 'microsoft.network/virtualhubs') | extend vwanType = tostring(properties.type) | extend compliant = 1 | project name, type, id, location, resourceGroup, subscriptionId, vwanType, compliant",
+      "description": "Checks for Virtual WAN and Virtual Hub resources. Their presence confirms the network architecture uses Virtual WAN and can be aligned to an identified routing scenario."
     },
     {
       "guid": "261623a7-65a9-417e-8f34-8ef254c27d42",
@@ -1161,8 +1182,9 @@
       "subcategory": "Governance",
       "severity": "Medium",
       "text": "Map regulatory and compliance requirements to Azure Policy definitions and Azure role assignments.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "PolicyResources | where type =~ 'microsoft.authorization/policyassignments' | extend scope = tostring(properties.scope) | extend isMgScope = iff(scope startswith '/providers/Microsoft.Management/managementGroups/', 1, 0) | extend compliant = isMgScope | project name, id, scope, isMgScope, compliant",
+      "description": "Checks Azure Policy assignments for management group scope. Assignments at management group level ensure regulatory and compliance requirements are enforced hierarchically across all child subscriptions."
     },
     {
       "guid": "223ace8c-b123-408c-a501-7f154e3ab369",
@@ -1268,8 +1290,9 @@
       "subcategory": "Sovereign Cloud",
       "severity": "Medium",
       "text": "Ensure primary and DR regions are inside the allowed jurisdiction (including paired region behavior, ZRS/GZRS constraints).",
-      "queryable": false,
-      "reason": "This sovereignty requirement depends on personnel, support process, or contractual controls that Azure Resource Graph does not expose."
+      "queryable": true,
+      "graph": "Resources | where isnotempty(location) and location != 'global' | summarize resourceCount = count() by location | extend compliant = 1 | project location, resourceCount, compliant",
+      "description": "Lists all Azure regions where resources are deployed with resource counts per region. All rows return compliant=1; a review is required to verify each region is within the organisation's permitted jurisdictional boundaries for primary and DR deployments."
     },
     {
       "guid": "bfaf7b7a-9e6c-4840-a2bd-2c524326bdf6",
@@ -1277,8 +1300,9 @@
       "subcategory": "Sovereign Cloud",
       "severity": "Medium",
       "text": "For landing zone services (Databases, Storage, Containers, Analytics, AI), ensure the data‑processing locations and feature availabilities are acceptable within permitted regions or sovereignty constraints.",
-      "queryable": false,
-      "reason": "This is primarily a planning, documentation, or operational-process requirement rather than a directly queryable Azure resource configuration."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.sql/servers', 'microsoft.storage/storageaccounts', 'microsoft.documentdb/databaseaccounts', 'microsoft.containerservice/managedclusters', 'microsoft.cognitiveservices/accounts', 'microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers') | extend compliant = 1 | project name, type, id, location, resourceGroup, subscriptionId, compliant",
+      "description": "Lists core landing zone PaaS services with their deployment locations. All rows return compliant=1; a review is required to verify data-processing locations are within permitted regions or sovereignty constraints."
     },
     {
       "guid": "3105633e-b168-4ce0-a016-5f10e7cdea5a",
@@ -1295,8 +1319,9 @@
       "subcategory": "Sovereign Cloud",
       "severity": "Medium",
       "text": "Do you require Azure confidential computing for sensitive workloads?",
-      "queryable": false,
-      "reason": "This is a business or regulatory requirement question rather than a resource-state control that Azure Resource Graph can validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.compute/virtualmachines' | extend securityType = tostring(properties.securityProfile.securityType) | extend isConfidential = iff(securityType =~ 'ConfidentialVM', 1, 0) | extend compliant = isConfidential | project name, id, location, resourceGroup, securityType, compliant",
+      "description": "Checks VMs for the ConfidentialVM security type, enabling hardware-based trusted execution environments. Use this to verify sensitive workloads have confidential computing enabled where required."
     },
     {
       "guid": "67e7a8ed-4b30-4e38-a3f2-9812b2363cef",
@@ -1314,8 +1339,9 @@
       "subcategory": "Monitoring",
       "severity": "Medium",
       "text": "Decide whether to use a single Azure Monitor Logs workspace for all regions or to create multiple workspaces to cover various geographical regions. Each approach has advantages and disadvantages, including potential cross-region networking charges",
-      "queryable": false,
-      "reason": "This is primarily a planning, documentation, or operational-process requirement rather than a directly queryable Azure resource configuration."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.operationalinsights/workspaces' | extend retentionDays = toint(properties.retentionInDays) | extend compliant = iff(retentionDays >= 30, 1, 0) | project name, id, location, resourceGroup, subscriptionId, retentionDays, compliant",
+      "description": "Lists all Log Analytics workspaces with their retention periods. Workspaces with fewer than 30 days retention are flagged non-compliant. The workspace and region distribution supports the single vs multi-workspace architecture decision."
     },
     {
       "guid": "5e6c4cfd-3e50-4454-9c24-47ec66138a72",
@@ -1452,8 +1478,9 @@
       "subcategory": "Monitoring",
       "severity": "Medium",
       "text": "Ensure that monitoring requirements have been assessed and that appropriate data collection and alerting configurations are applied.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.insights/metricalerts', 'microsoft.insights/scheduledqueryrules', 'microsoft.insights/activitylogalerts') | extend alertEnabled = tobool(properties.enabled) | extend compliant = iff(alertEnabled == true, 1, 0) | project name, type, id, location, resourceGroup, alertEnabled, compliant",
+      "description": "Checks for Azure Monitor alert rules (metric alerts, log query rules, and activity log alerts) and whether they are enabled. The presence of enabled rules indicates monitoring and alerting requirements have been implemented."
     },
     {
       "guid": "aa45be6a-8f2d-4896-b0e3-775e6e94e610",
@@ -1511,8 +1538,9 @@
       "subcategory": "Protect and Recover",
       "severity": "Medium",
       "text": "Use native PaaS service disaster recovery capabilities. Perform failover testing with these capabilities.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.storage/storageaccounts', 'microsoft.documentdb/databaseaccounts') | extend skuName = tostring(sku.name) | extend failoverRegions = array_length(properties.failoverPolicies) | extend geoRedundant = case(type =~ 'microsoft.storage/storageaccounts', iff(skuName in~ ('Standard_GRS', 'Standard_GZRS', 'Standard_RAGRS', 'Standard_RAGZRS'), true, false), type =~ 'microsoft.documentdb/databaseaccounts', iff(coalesce(toint(failoverRegions), 0) > 1, true, false), false) | extend compliant = iff(geoRedundant, 1, 0) | project name, type, id, location, resourceGroup, skuName, geoRedundant, compliant",
+      "description": "Checks Storage Accounts and Cosmos DB accounts for geo-redundancy. Storage must use GRS/GZRS/RAGRS/RAGZRS SKUs; Cosmos DB must have multiple failover regions to support native PaaS disaster recovery capabilities."
     },
     {
       "guid": "f625ca44-e569-45f2-823a-ce8cb12308ca",
@@ -1559,8 +1587,9 @@
       "subcategory": "Access control",
       "severity": "Medium",
       "text": "Apply a zero-trust approach for access to the Azure platform.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/virtualnetworks' | extend subnets = properties.subnets | mv-expand subnet = subnets | extend subnetName = tostring(subnet.name) | extend hasNsg = isnotempty(tostring(subnet.properties.networkSecurityGroup.id)) | where subnetName !in~ ('GatewaySubnet', 'AzureFirewallSubnet', 'AzureFirewallManagementSubnet', 'AzureBastionSubnet', 'RouteServerSubnet') | extend compliant = iff(hasNsg, 1, 0) | project name, id, location, resourceGroup, subnetName, hasNsg, compliant",
+      "description": "Checks workload subnets (excluding reserved system subnets) for an attached Network Security Group. NSG coverage on all workload subnets is a core network-layer control in a zero-trust access approach for the Azure platform."
     },
     {
       "guid": "5017f154-e3ab-4369-9829-e7e316183687",
@@ -1597,8 +1626,9 @@
       "subcategory": "Encryption and keys",
       "severity": "Medium",
       "text": "Automate the certificate management and renewal process with public certificate authorities to ease administration.",
-      "queryable": false,
-      "reason": "This is primarily a planning, documentation, or operational-process requirement rather than a directly queryable Azure resource configuration."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.keyvault/vaults/certificates' | extend lifetimeActions = properties.policy.lifetimeActions | extend compliant = iff(array_length(lifetimeActions) > 0, 1, 0) | project name, id, resourceGroup, compliant",
+      "description": "Checks Key Vault certificates for defined lifetime actions such as auto-renewal triggers. Certificates without lifetime actions are at risk of unexpected expiry."
     },
     {
       "guid": "913156a1-2476-4e49-b541-acdce979377b",
@@ -1606,8 +1636,9 @@
       "subcategory": "Encryption and keys",
       "severity": "Medium",
       "text": "Establish an automated process for key and certificate rotation.",
-      "queryable": false,
-      "reason": "This is primarily a planning, documentation, or operational-process requirement rather than a directly queryable Azure resource configuration."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.keyvault/vaults/keys' | extend rotationPolicy = properties.rotationPolicy | extend compliant = iff(isnotempty(rotationPolicy) and tostring(rotationPolicy) != '{}', 1, 0) | project name, id, resourceGroup, compliant",
+      "description": "Checks Key Vault keys for a defined rotation policy. Keys without a rotation policy require manual rotation, leaving cryptographic material in use longer than recommended."
     },
     {
       "guid": "cdb3751a-b2ab-413a-ba6e-55d7d8a2adb1",
@@ -1645,8 +1676,9 @@
       "subcategory": "Encryption and keys",
       "severity": "Medium",
       "text": "Default to Microsoft-managed keys for principal encryption functionality and use customer-managed keys when required.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.storage/storageaccounts', 'microsoft.sql/servers/databases', 'microsoft.documentdb/databaseaccounts', 'microsoft.cognitiveservices/accounts') | extend keySource = tostring(properties.encryption.keySource) | extend usesCMK = iff(keySource =~ 'Microsoft.Keyvault', true, false) | extend compliant = iff(usesCMK == false, 1, 0) | project name, type, id, resourceGroup, location, keySource, usesCMK, compliant",
+      "description": "Checks storage, database, and AI resources for their encryption key source. Resources using customer-managed keys (CMK) are flagged for review; Microsoft-managed keys are the recommended default unless CMK is explicitly required."
     },
     {
       "guid": "b48ade7f-50be-4d2e-9866-d57b17942fc2",
@@ -1663,8 +1695,9 @@
       "subcategory": "Sovereign Cloud",
       "severity": "Medium",
       "text": "If you bring your own keys, ensure they are supported across all required services.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.storage/storageaccounts', 'microsoft.sql/servers/databases', 'microsoft.documentdb/databaseaccounts', 'microsoft.keyvault/vaults', 'microsoft.cognitiveservices/accounts', 'microsoft.containerservice/managedclusters') | extend keySource = tostring(properties.encryption.keySource) | extend cmkEnabled = iff(keySource =~ 'Microsoft.Keyvault', true, false) | extend compliant = 1 | project name, type, id, location, resourceGroup, cmkEnabled, compliant",
+      "description": "Inventories key PaaS services and shows which have customer-managed key encryption enabled. Use this list to verify BYOK is consistently applied across all required services."
     },
     {
       "guid": "4ac6b67c-b3a4-4ff9-8e87-b07a7ce7bbdb",
