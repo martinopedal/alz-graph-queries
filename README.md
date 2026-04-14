@@ -6,7 +6,7 @@ Azure Resource Graph (ARG) queries for **Azure Landing Zone checklist items** th
 
 | File | Description |
 |---|---|
-| `queries/alz_additional_queries.json` | 206 checklist items: **122 with new ARG queries**, 84 marked as not queryable via ARG |
+| `queries/alz_additional_queries.json` | 206 checklist items: **132 with new ARG queries**, 74 marked as not queryable via ARG |
 | `Validate-Queries.ps1` | PowerShell script to run all queries against your Azure environment and report results |
 | `items_no_query.json` | Source data: the 206 original items without queries |
 | `alz_checklist_full.json` | Full ALZ checklist for reference |
@@ -15,17 +15,17 @@ Azure Resource Graph (ARG) queries for **Azure Landing Zone checklist items** th
 
 | Category | Original Queries | New Queries | Not Queryable | Total |
 |---|---|---|---|---|
-| Network Topology and Connectivity | 36 | 53 | 17 | 106 |
-| Security | 2 | 22 | 8 | 32 |
+| Network Topology and Connectivity | 36 | 61 | 9 | 106 |
+| Security | 2 | 23 | 7 | 32 |
 | Management & Monitoring | 1 | 24 | 1 | 26 |
 | Identity and Access Management | 7 | 1 | 16 | 24 |
 | Resource Organization | 3 | 10 | 9 | 22 |
-| Governance | 0 | 12 | 4 | 16 |
+| Governance | 0 | 13 | 3 | 16 |
 | Azure Billing & Entra ID Tenants | 0 | 0 | 15 | 15 |
 | Platform Automation and DevOps | 0 | 0 | 14 | 14 |
-| **Total** | **49** | **122** | **84** | **255** |
+| **Total** | **49** | **132** | **74** | **255** |
 
-**Combined coverage: 171/255 items (67%) now have automated Graph queries**, up from 135/255 (53%).
+**Combined coverage: 181/255 items (71%) now have automated Graph queries**, up from 135/255 (53%).
 
 ## Quick Start
 
@@ -71,7 +71,7 @@ The script produces:
 | **EMPTY** | Query executed but returned 0 rows. May mean the resource type doesn't exist in scope (which could itself be a finding). |
 | **ERROR** | Query syntax error or permission issue. The query needs fixing. |
 
-## Why 84 items are not queryable
+## Why 74 items are not queryable
 
 Many ALZ checklist items are **organizational, process, or identity-related** and cannot be validated through Azure Resource Graph alone:
 

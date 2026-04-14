@@ -754,8 +754,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "When you use multiple ExpressRoute circuits or multiple on-prem locations, use BGP attributes to optimize routing.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressroutecircuits' | summarize circuitCount = count(), circuits = make_list(name) by subscriptionId | extend compliant = iff(circuitCount > 1, 1, 0) | project subscriptionId, circuitCount, compliant",
+      "description": "Checks whether subscriptions have more than one ExpressRoute circuit. Multiple circuits are a precondition for meaningful BGP attribute routing optimisation across on-premises locations."
     },
     {
       "guid": "72e52e36-11cc-458b-9a4b-1511e43a58a9",
@@ -763,8 +764,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "For scenarios that require bandwidth higher than 10 Gbps or dedicated 10/100-Gbps ports, use ExpressRoute Direct.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressrouteports' | extend bandwidthGbps = toint(properties.bandwidthInGbps) | extend compliant = iff(bandwidthGbps >= 10, 1, 0) | project name, id, location, resourceGroup, bandwidthGbps, compliant",
+      "description": "Checks ExpressRoute Direct port resources for bandwidth of 10 Gbps or higher. ExpressRoute Direct provides dedicated 10/100 Gbps ports directly into the Microsoft network for high-bandwidth scenarios."
     },
     {
       "guid": "c2299c4d-7b57-4d0c-9555-62f2b3e4563a",
@@ -782,8 +784,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "Use redundant VPN appliances on-premises (active/active or active/passive).",
-      "queryable": false,
-      "reason": "This depends on on-premises or provider-side configuration that Azure Resource Graph cannot see."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/virtualnetworkgateways' | where tostring(properties.gatewayType) =~ 'Vpn' | extend activeActive = tobool(properties.activeActive) | extend compliant = iff(activeActive == true, 1, 0) | project name, id, location, resourceGroup, activeActive, compliant",
+      "description": "Checks the ARG-visible Azure side of the VPN redundancy requirement: whether Azure VPN Gateways are configured in active-active mode. Active-active gateways present two Azure IPs and maintain two BGP sessions, complementing redundant on-premises VPN appliances."
     },
     {
       "guid": "718cb437-b060-2589-8856-2e93a5c6633b",
@@ -801,8 +804,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "When traffic isolation or dedicated bandwidth is required, such as for separating production and nonproduction environments, use different ExpressRoute circuits. It will help you ensure isolated routing domains and alleviate noisy-neighbor risks.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressroutecircuits' | extend circuitSku = tostring(sku.tier) | summarize circuitCount = count(), skus = make_set(circuitSku) by subscriptionId | extend compliant = iff(circuitCount > 1, 1, 0) | project subscriptionId, circuitCount, skus, compliant",
+      "description": "Checks whether subscriptions have more than one ExpressRoute circuit. Multiple circuits enable traffic isolation between environments (production vs non-production) and eliminate noisy-neighbour risks."
     },
     {
       "guid": "b30e38c3-f298-412b-8363-cefe179b599d",
@@ -860,8 +864,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "Ensure Bidirectional Forwarding Detection (BFD) is enabled and configured on customer or provider edge routing devices.",
-      "queryable": false,
-      "reason": "This depends on on-premises or provider-side configuration that Azure Resource Graph cannot see."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/expressroutecircuits' | extend peerings = properties.peerings | mv-expand peering = peerings | extend peeringType = tostring(peering.properties.peeringType) | extend peeringState = tostring(peering.properties.state) | where peeringType =~ 'AzurePrivatePeering' | extend compliant = iff(peeringState =~ 'Enabled', 1, 0) | project name, id, location, resourceGroup, peeringType, peeringState, compliant",
+      "description": "Checks the ARG-visible precondition for BFD: whether ExpressRoute circuits have an enabled Azure Private Peering session. BFD requires an active BGP session; customer and provider edge BFD configuration is not visible in ARG."
     },
     {
       "guid": "669b215a-ce43-4371-8f6f-11047f6490f1",
@@ -889,8 +894,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "Do not use ExpressRoute circuits for VNet-to-VNet communication.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type in~ ('microsoft.network/connections', 'microsoft.network/virtualnetworkpeerings') | extend rType = iff(type =~ 'microsoft.network/connections' and tostring(properties.connectionType) =~ 'ExpressRoute', 'ER', iff(type =~ 'microsoft.network/virtualnetworkpeerings', 'PEERING', 'other')) | where rType in ('ER', 'PEERING') | summarize hasER = countif(rType == 'ER'), hasPeering = countif(rType == 'PEERING') by subscriptionId | extend compliant = iff(hasER > 0 and hasPeering > 0, 1, iff(hasER == 0, 1, 0)) | project subscriptionId, hasER, hasPeering, compliant",
+      "description": "Checks subscriptions with ExpressRoute connections for VNet peerings. VNet peerings enable direct VNet-to-VNet traffic over the Microsoft backbone; their absence in ER-connected subscriptions suggests VNet-to-VNet traffic may traverse the ExpressRoute circuit."
     },
     {
       "guid": "8ac6a9e0-1e6a-483d-b5de-32c199248160",
@@ -898,8 +904,9 @@
       "subcategory": "Hybrid",
       "severity": "Low",
       "text": "Do not send Azure traffic to hybrid locations for inspection. Instead, follow the principle 'traffic in Azure stays in Azure' so that communication across resources in Azure occurs via the Microsoft backbone network.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/routetables' | extend routes = properties.routes | mv-expand route = routes | extend addressPrefix = tostring(route.properties.addressPrefix) | extend nextHopType = tostring(route.properties.nextHopType) | where addressPrefix == '0.0.0.0/0' | extend compliant = iff(nextHopType in~ ('VirtualAppliance', 'Internet', 'None'), 1, 0) | project name, id, location, resourceGroup, nextHopType, compliant",
+      "description": "Checks user-defined routes for default route (0.0.0.0/0) next-hop type. Routes pointing to VirtualAppliance (Azure Firewall or NVA) keep traffic in Azure; routes pointing to VirtualNetworkGateway may forward traffic to on-premises, violating the principle that Azure traffic stays in Azure."
     },
     {
       "guid": "4cc8ca4e-a503-4bac-9b1e-82283a711043",
@@ -1036,8 +1043,9 @@
       "subcategory": "Firewall",
       "severity": "Medium",
       "text": "As part of your TLS inspection, plan for receiving traffic from Azure App Gateways for inspection.",
-      "queryable": false,
-      "reason": "This is primarily a planning, documentation, or operational-process requirement rather than a directly queryable Azure resource configuration."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/firewallpolicies' | extend tlsCertAuthority = tostring(properties.transportSecurity.certificateAuthority.name) | extend tlsEnabled = isnotempty(tlsCertAuthority) | extend compliant = iff(tlsEnabled, 1, 0) | project name, id, location, resourceGroup, tlsCertAuthority, tlsEnabled, compliant",
+      "description": "Checks Azure Firewall Policies for TLS inspection configuration. A configured certificate authority in the transport security policy indicates TLS inspection is enabled for inspecting HTTPS traffic from App Gateways and other sources."
     },
     {
       "guid": "64e7000e-3c06-485e-b455-ced7f454cba3",
@@ -1311,8 +1319,9 @@
       "subcategory": "Sovereign Cloud",
       "severity": "Medium",
       "text": "Do you require Azure confidential computing for sensitive workloads?",
-      "queryable": false,
-      "reason": "This is a business or regulatory requirement question rather than a resource-state control that Azure Resource Graph can validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.compute/virtualmachines' | extend securityType = tostring(properties.securityProfile.securityType) | extend isConfidential = iff(securityType =~ 'ConfidentialVM', 1, 0) | extend compliant = isConfidential | project name, id, location, resourceGroup, securityType, compliant",
+      "description": "Checks VMs for the ConfidentialVM security type, enabling hardware-based trusted execution environments. Use this to verify sensitive workloads have confidential computing enabled where required."
     },
     {
       "guid": "67e7a8ed-4b30-4e38-a3f2-9812b2363cef",
@@ -1578,8 +1587,9 @@
       "subcategory": "Access control",
       "severity": "Medium",
       "text": "Apply a zero-trust approach for access to the Azure platform.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "Resources | where type =~ 'microsoft.network/virtualnetworks' | extend subnets = properties.subnets | mv-expand subnet = subnets | extend subnetName = tostring(subnet.name) | extend hasNsg = isnotempty(tostring(subnet.properties.networkSecurityGroup.id)) | where subnetName !in~ ('GatewaySubnet', 'AzureFirewallSubnet', 'AzureFirewallManagementSubnet', 'AzureBastionSubnet', 'RouteServerSubnet') | extend compliant = iff(hasNsg, 1, 0) | project name, id, location, resourceGroup, subnetName, hasNsg, compliant",
+      "description": "Checks workload subnets (excluding reserved system subnets) for an attached Network Security Group. NSG coverage on all workload subnets is a core network-layer control in a zero-trust access approach for the Azure platform."
     },
     {
       "guid": "5017f154-e3ab-4369-9829-e7e316183687",
