@@ -1,4 +1,4 @@
-{
+﻿{
   "metadata": {
     "name": "ALZ Additional Graph Queries",
     "description": "Azure Resource Graph queries for ALZ checklist items not covered by the original checklist",
@@ -410,8 +410,9 @@
       "subcategory": "Subscriptions",
       "severity": "Medium",
       "text": "For Sovereign Landing Zone, have a 'confidential corp' and 'confidential online' management group directly under the 'landing zones' MG.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "resourcecontainers | where type =~ 'microsoft.management/managementgroups' | extend parentName = tolower(coalesce(tostring(properties.details.parent.displayName), '')) | extend mgName = tolower(coalesce(tostring(properties.displayName), name)) | where parentName has 'landing' | extend compliant = iff(mgName has 'confidential', 1, 0) | project name, mgName, parentName, compliant",
+      "description": "Checks that management groups with 'confidential' in their name exist directly under a 'landing zones' parent MG, as required for Sovereign Landing Zone deployments."
     },
     {
       "guid": "250d81ce-8bbe-4f85-9051-6a18a8221e50",
@@ -428,8 +429,9 @@
       "subcategory": "Regions",
       "severity": "Medium",
       "text": "Deploy your Azure landing zone in a multi-region deployment. Depending on customer size, locations, and users presence, operating in multiple regions can be a common choice to deliver services and run applications closer to them. Using a multi-region deployment is also important to provide geo disaster recovery capabilities, to eliminate the dependency from a single region capacity and diminish the risk of a temporary and localized resource capacity constraint.",
-      "queryable": false,
-      "reason": "Region availability, capacity, or service offering validation requires external service catalog context beyond Azure Resource Graph."
+      "queryable": true,
+      "graph": "resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | join kind=leftouter (resources | where isnotempty(location) | summarize regionCount=dcount(location) by subscriptionId) on subscriptionId | extend compliant = iff(coalesce(toint(regionCount), 0) > 1, 1, 0) | project name, subscriptionId, regionCount=coalesce(toint(regionCount), 0), compliant",
+      "description": "Checks each subscription for resources deployed across more than one Azure region, indicating a multi-region landing zone deployment."
     },
     {
       "guid": "4c27d42e-8bba-4c75-9155-9ab9153e8908",
@@ -675,8 +677,9 @@
       "subcategory": "Internet",
       "severity": "Low",
       "text": "When using Azure Front Door and Azure Application Gateway to help protect HTTP/S apps, use WAF policies in Azure Front Door. Lock down Azure Application Gateway to receive traffic only from Azure Front Door.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "resources | where type =~ 'microsoft.network/frontdoors' | mv-expand ep = properties.frontendEndpoints | extend wafPolicyId = tostring(ep.properties.webApplicationFirewallPolicyLink.id) | summarize total=count(), withWaf=countif(isnotempty(wafPolicyId)) by id, name | extend compliant = iff(total == withWaf and total > 0, 1, 0) | project name, id, total, withWaf, compliant",
+      "description": "Checks Classic Azure Front Door resources to confirm every frontend endpoint has a WAF policy link configured."
     },
     {
       "guid": "2363cefe-179b-4599-be0d-5973cd4cd21b",
@@ -684,8 +687,9 @@
       "subcategory": "Internet",
       "severity": "High",
       "text": "When WAFs and other reverse proxies are required for inbound HTTP/S connections, deploy them within a landing-zone virtual network and together with the apps that they're protecting and exposing to the internet.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "resources | where type =~ 'microsoft.network/applicationgateways' | extend skuTier = tolower(tostring(properties.sku.tier)) | extend wafEnabled = tostring(properties.webApplicationFirewallConfiguration.enabled) | extend wafMode = tolower(tostring(properties.webApplicationFirewallConfiguration.firewallMode)) | extend compliant = iff((skuTier has 'waf') and wafEnabled == 'true' and wafMode == 'prevention', 1, 0) | project name, id, skuTier, wafEnabled, wafMode, compliant",
+      "description": "Checks Application Gateways to confirm they use a WAF_v2 tier with WAF enabled in Prevention mode for HTTP/S workload protection."
     },
     {
       "guid": "088137f5-e6c4-4cfd-9e50-4547c2447ec6",
@@ -703,8 +707,9 @@
       "subcategory": "Internet",
       "severity": "High",
       "text": "Plan for how to manage your network outbound traffic configuration and strategy before the upcoming breaking change. On September 30, 2025, default outbound access for new deployments will be retired and only explicit access configurations will be allowed.",
-      "queryable": false,
-      "reason": "This is primarily a planning, documentation, or operational-process requirement rather than a directly queryable Azure resource configuration."
+      "queryable": true,
+      "graph": "resources | where type =~ 'microsoft.network/virtualnetworks' | mv-expand subnet = properties.subnets | where tostring(subnet.name) !in ('GatewaySubnet','AzureFirewallSubnet','AzureFirewallManagementSubnet','AzureBastionSubnet','RouteServerSubnet') | extend hasNatGateway = isnotempty(tostring(subnet.properties.natGateway.id)) | extend compliant = iff(hasNatGateway, 1, 0) | project vnetName=name, subnetName=tostring(subnet.name), id, compliant",
+      "description": "Checks each non-infrastructure VNet subnet for an explicit NAT gateway to satisfy the September 2025 default-outbound-access retirement requirement."
     },
     {
       "guid": "b1c82a3f-2320-4dfa-8972-7ae4823c8930",
@@ -798,8 +803,9 @@
       "subcategory": "Hybrid",
       "severity": "Medium",
       "text": "Monitor ExpressRoute availability and utilization using built-in Express Route Insights.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "resources | where type =~ 'microsoft.network/expressroutecircuits' | extend ercId = tolower(id) | join kind=leftouter (resources | where type =~ 'microsoft.insights/diagnosticsettings' | extend parentId = tolower(tostring(split(id, '/providers/microsoft.insights/diagnosticsettings')[0])) | project parentId, diagName=name) on $left.ercId == $right.parentId | extend compliant = iff(isnotempty(diagName), 1, 0) | project name, id, compliant",
+      "description": "Checks each ExpressRoute circuit for at least one diagnostic setting, enabling Express Route Insights for availability and utilization monitoring."
     },
     {
       "guid": "5bf68dc9-325e-4873-bf88-f8214ef2e5d2",
@@ -1028,8 +1034,9 @@
       "subcategory": "Firewall",
       "severity": "Low",
       "text": "Implement backups for your firewall rules",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "resources | where type =~ 'microsoft.network/azurefirewalls' | extend firewallPolicy = tostring(properties.firewallPolicy.id) | extend compliant = iff(isnotempty(firewallPolicy), 1, 0) | project name, id, firewallPolicy, compliant",
+      "description": "Checks Azure Firewalls for an associated Firewall Policy resource, enabling IaC-based rule management and backup of firewall configuration."
     },
     {
       "guid": "d301d6e8-72e5-42e3-911c-c58b5a4b1511",
@@ -1037,8 +1044,9 @@
       "subcategory": "PaaS",
       "severity": "High",
       "text": "Do not disrupt control-plane communication for Azure PaaS services injected into a virtual networks, such as with a 0.0.0.0/0 route or an NSG rule that blocks control plane traffic.",
-      "queryable": false,
-      "reason": "This is primarily a planning, documentation, or operational-process requirement rather than a directly queryable Azure resource configuration."
+      "queryable": true,
+      "graph": "resources | where type =~ 'microsoft.network/virtualnetworks' | mv-expand subnet = properties.subnets | extend hasDelegation = array_length(subnet.properties.delegations) > 0 | extend routeTableId = tolower(tostring(subnet.properties.routeTable.id)) | where hasDelegation and isnotempty(routeTableId) | join kind=leftouter (resources | where type =~ 'microsoft.network/routetables' | mv-expand route = properties.routes | where route.properties.addressPrefix == '0.0.0.0/0' and route.properties.nextHopType == 'VirtualAppliance' | project rtId=tolower(id), hasDefaultRoute=1) on $left.routeTableId == $right.rtId | extend compliant = iff(isnotempty(hasDefaultRoute), 0, 1) | project vnetName=name, subnetName=tostring(subnet.name), routeTableId, compliant",
+      "description": "Detects subnets with PaaS service delegations that have a route table containing a 0.0.0.0/0 route to a virtual appliance, which can disrupt Azure PaaS control-plane traffic."
     },
     {
       "guid": "e43a58a9-c229-49c4-b7b5-7d0c655562f2",
@@ -1123,8 +1131,9 @@
       "subcategory": "Virtual WAN",
       "severity": "Medium",
       "text": "Use Azure Monitor Insights for Virtual WAN to monitor the end-to-end topology of the Virtual WAN, status, and key metrics.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "resources | where type =~ 'microsoft.network/virtualwans' | extend wanId = tolower(id) | join kind=leftouter (resources | where type =~ 'microsoft.insights/diagnosticsettings' | extend parentId = tolower(tostring(split(id, '/providers/microsoft.insights/diagnosticsettings')[0])) | project parentId, diagName=name) on $left.wanId == $right.parentId | extend compliant = iff(isnotempty(diagName), 1, 0) | project name, id, compliant",
+      "description": "Checks Virtual WAN resources for at least one diagnostic setting, enabling Azure Monitor Insights for end-to-end topology and key metrics."
     },
     {
       "guid": "2586b854-237e-47f1-84a1-d45d4cd2310d",
@@ -1230,8 +1239,9 @@
       "subcategory": "Sovereign Cloud",
       "severity": "Medium",
       "text": "If any data sovereignty requirements exist, Azure Policies should be deployed to enforce them.",
-      "queryable": false,
-      "reason": "This is a business or regulatory requirement question rather than a resource-state control that Azure Resource Graph can validate directly."
+      "queryable": true,
+      "graph": "policyresources | where type =~ 'microsoft.authorization/policyassignments' | extend defId = tolower(tostring(properties.policyDefinitionId)) | extend displayName = tolower(tostring(properties.displayName)) | extend compliant = iff(defId contains 'e56962a6' or defId contains 'e765b65a' or displayName has 'allowed location', 1, 0) | project name, scope=tostring(properties.scope), displayName, compliant",
+      "description": "Checks for 'Allowed locations' policy assignments that restrict resource deployment to approved regions, enforcing data sovereignty requirements."
     },
     {
       "guid": "78b22132-b41c-460b-a4d3-df8f73a67dc2",
@@ -1313,8 +1323,9 @@
       "subcategory": "Monitoring",
       "severity": "High",
       "text": "Export logs to Azure Storage if your log retention requirements exceed twelve years. Use immutable storage with a write-once, read-many policy to make data non-erasable and non-modifiable for a user-specified interval.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "resources | where type =~ 'microsoft.storage/storageaccounts' | extend immutableEnabled = tobool(properties.immutableStorageWithVersioning.enabled) | extend compliant = iff(immutableEnabled == true, 1, 0) | project name, id, kind=tostring(kind), compliant",
+      "description": "Checks storage accounts for immutable storage with versioning enabled, satisfying the write-once read-many policy required for long-term log retention beyond twelve years."
     },
     {
       "guid": "e7d7e484-3276-4d8b-bc05-5bcf619e8a13",
@@ -1342,8 +1353,9 @@
       "subcategory": "Operational compliance",
       "severity": "Medium",
       "text": "Use Azure Update Manager as a patching mechanism for Windows and Linux VMs outside of Azure using Azure Arc.",
-      "queryable": false,
-      "reason": "This requirement depends on organizational intent, operational practice, or external context that Azure Resource Graph cannot validate directly."
+      "queryable": true,
+      "graph": "resources | where type =~ 'microsoft.hybridcompute/machines' | extend arcId = tolower(id) | join kind=leftouter (maintenanceresources | where type =~ 'microsoft.maintenance/configurationassignments' | extend parentId = tolower(tostring(split(id, '/providers/microsoft.maintenance/configurationassignments')[0])) | project parentId, assignmentName=name) on $left.arcId == $right.parentId | extend compliant = iff(isnotempty(assignmentName), 1, 0) | project name, id, compliant",
+      "description": "Checks Azure Arc-connected machines for an assigned maintenance configuration, indicating enrollment in Azure Update Manager for patching outside of Azure."
     },
     {
       "guid": "90483845-c986-4cb2-a131-56a12476e49f",
@@ -1749,8 +1761,9 @@
       "subcategory": "Sovereign Cloud",
       "severity": "Medium",
       "text": "For Sovereign Landing Zone, enforce customer‑controlled access to Microsoft support operations by enabling Customer Lockbox for all supported Azure and Microsoft 365 services.",
-      "queryable": false,
-      "reason": "This sovereignty requirement depends on personnel, support process, or contractual controls that Azure Resource Graph does not expose."
+      "queryable": true,
+      "graph": "policyresources | where type =~ 'microsoft.authorization/policyassignments' | extend defId = tolower(tostring(properties.policyDefinitionId)) | extend displayName = tolower(tostring(properties.displayName)) | extend compliant = iff(defId has 'lockbox' or displayName has 'lockbox', 1, 0) | project name, scope=tostring(properties.scope), displayName, compliant",
+      "description": "Checks for Customer Lockbox policy assignments that enforce customer-controlled access to Microsoft support operations, as required for Sovereign Landing Zone environments."
     },
     {
       "guid": "874a748b-662d-46d1-9051-2a66498f6dfe",
