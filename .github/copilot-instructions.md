@@ -33,3 +33,10 @@ Queries live in `queries/alz_additional_queries.json` — each item has a `query
 - ✅ No force push, linear history enforced
 - ✅ 0 required reviewers — solo repo, CI passing is the gate
 - ❌ Signed commits NOT required — breaks Dependabot and GitHub API commits; remove if accidentally re-added
+
+## Issue conventions
+
+- ✅ Every new issue MUST have the `squad` label — this is how Ralph picks it up for dispatch
+- ✅ The `auto-label-issues.yml` workflow adds `squad` automatically on open — never remove it
+- ✅ Use `enhancement`, `bug`, `documentation` alongside `squad` for type and priority
+- ✅ Issue titles must follow conventional commits prefix: `feat:`, `fix:`, `docs:`, `chore:`
