@@ -9,8 +9,14 @@ This project incorporates content from the following open-source projects.
 - **Copyright:** Copyright (c) Microsoft Corporation
 - **License:** MIT License
 
-The files `alz_checklist_full.json` and `queries/alz_additional_queries.json` contain
-query data and checklist items derived from the Azure Review Checklists project.
+The following files contain checklist data (GUIDs, categories, text, severity ratings)
+derived from the Azure Review Checklists project:
+
+- `alz_checklist_full.json` — full ALZ checklist, used for mapping and reference
+- `items_no_query.json` — checklist items not yet covered by ARG queries
+- `items_without_queries.csv` — same data in CSV format
+- `queries/alz_additional_queries.json` — checklist metadata fields; KQL queries in the
+  `graph` field are original work by this project's contributors
 
 ---
 
@@ -18,15 +24,15 @@ query data and checklist items derived from the Azure Review Checklists project.
 - **Source:** https://github.com/Azure/azqr
 - **Copyright:** Copyright (c) Microsoft Corporation
 - **License:** MIT License
-- **Usage:** Invoked as an external binary (not bundled). Install separately.
+- **Usage:** Referenced in documentation. Install separately from https://azure.github.io/azqr
 
 ---
 
-## AzGovViz - Azure Governance Visualizer
+## AzGovViz — Azure Governance Visualizer
 - **Source:** https://github.com/JulianHayward/Azure-MG-Sub-Governance-Reporting
-- **Copyright:** Copyright (c) Julian Hayward
+- **Copyright:** Copyright (c) 2020 Julian Hayward
 - **License:** MIT License
-- **Usage:** Invoked as an external script (not bundled). Install separately.
+- **Usage:** Referenced in documentation. Install separately.
 
 ---
 
@@ -34,15 +40,15 @@ query data and checklist items derived from the Azure Review Checklists project.
 - **Source:** https://github.com/Azure/PSRule.Rules.Azure
 - **Copyright:** Copyright (c) Microsoft Corporation and contributors
 - **License:** MIT License
-- **Usage:** Installed via PowerShell Gallery. Not bundled.
+- **Usage:** Dev/CI dependency. `Install-Module PSRule.Rules.Azure`
 
 ---
 
-## WARA - Well-Architected Reliability Assessment
+## WARA — Well-Architected Reliability Assessment
 - **Source:** https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2
 - **Copyright:** Copyright (c) Microsoft Corporation
 - **License:** MIT License
-- **Usage:** Installed via PowerShell Gallery. Not bundled.
+- **Usage:** Referenced in documentation. `Install-Module WARA`
 
 ---
 
@@ -50,7 +56,7 @@ query data and checklist items derived from the Azure Review Checklists project.
 - **Source:** https://github.com/pester/Pester
 - **Copyright:** Copyright (c) 2012 Jakub Jares and contributors
 - **License:** Apache License 2.0
-- **Usage:** Dev/CI test runner. Not shipped or bundled.
+- **Usage:** Test runner for CI. `Install-Module Pester`
 
 ---
 
@@ -58,4 +64,4 @@ query data and checklist items derived from the Azure Review Checklists project.
 - **Source:** https://github.com/Azure/azure-powershell
 - **Copyright:** Copyright (c) Microsoft Corporation
 - **License:** MIT License
-- **Usage:** Installed by users as a prerequisite. Not bundled.
+- **Usage:** Required dependency. `Install-Module Az`
