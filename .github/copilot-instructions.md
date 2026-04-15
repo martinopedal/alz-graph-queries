@@ -53,3 +53,9 @@ Every PR that changes code, queries, or configuration MUST include a docs update
 - ✅ The `auto-label-issues.yml` workflow adds `squad` automatically on open — never remove it
 - ✅ Use `enhancement`, `bug`, `documentation` alongside `squad` for type and priority
 - ✅ Issue titles must follow conventional commits prefix: `feat:`, `fix:`, `docs:`, `chore:`
+
+## GitHub-first principle
+Validate changes in GitHub Actions, not locally. Push, trigger workflow, check logs, iterate.
+
+## Actions version policy
+- Use actions/checkout@v6 and actions/setup-python@v6 (Node.js 24 compatible)
