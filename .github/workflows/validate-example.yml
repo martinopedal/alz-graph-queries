@@ -1,0 +1,59 @@
+# Example: Run ALZ validation in GitHub Actions using OIDC (WIF)
+# Copy and adapt this workflow to your own repo.
+name: ALZ Validation Example
+
+on:
+  workflow_dispatch:
+    inputs:
+      management_group:
+        description: Management Group ID to scan
+        required: false
+      report_format:
+        description: Report format (CSV, Markdown, HTML, All)
+        default: All
+        required: false
+
+permissions:
+  id-token: write   # Required for OIDC token exchange
+  contents: read
+
+jobs:
+  validate:
+    name: ALZ Checklist Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Azure login (OIDC / WIF)
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302 # v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+
+      - name: Run ALZ validation
+        uses: azure/powershell@v2
+        with:
+          azPSVersion: latest
+          inlineScript: |
+            $params = @{
+              ReportFormat = '${{ github.event.inputs.report_format || ''All'' }}'
+            }
+            $mg = '${{ github.event.inputs.management_group }}'
+            if ($mg) { $params['ManagementGroup'] = $mg }
+
+            ./Validate-Queries.ps1 @params
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alz-validation-reports
+          path: |
+            validation_results.csv
+            validation_results.md
+            validation_results.html
+          retention-days: 30
