@@ -13,12 +13,12 @@ jobs:
     if: github.event.label.name == 'squad'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2ebc4969ba044e5a1fc08e67ebc2a5e014 # v6.0.2
         with:
           persist-credentials: false
 
       - name: Triage issue via Lead agent
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7b8b4fefa03c823af1dea4aed5a07cde0 # v7.0.1
         with:
           script: |
             const fs = require('fs');
