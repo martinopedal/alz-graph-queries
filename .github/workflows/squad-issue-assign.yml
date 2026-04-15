@@ -15,8 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-      - name: Identify assigned member and trigger work
+      - name: Identify assigned memberand trigger work
         uses: actions/github-script@v7
         with:
           script: |

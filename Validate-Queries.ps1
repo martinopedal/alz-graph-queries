@@ -58,6 +58,17 @@ try {
     exit 1
 }
 
+# Pre-flight token expiry check
+try {
+    $tok = Get-AzAccessToken -ResourceUrl 'https://management.azure.com' -ErrorAction Stop
+    $remainingMin = ($tok.ExpiresOn - [DateTimeOffset]::UtcNow).TotalMinutes
+    if ($remainingMin -lt 15) {
+        Write-Warning "Azure token expires in $([math]::Round($remainingMin,0)) min — consider re-authenticating before a full run."
+    }
+} catch {
+    Write-Warning "Could not check token expiry: $($_.Exception.Message)"
+}
+
 # --- Load queries ---
 if (-not (Test-Path $QueriesFile)) {
     Write-Host "ERROR: Queries file not found at $QueriesFile" -ForegroundColor Red
@@ -97,28 +108,51 @@ foreach ($q in $queryable) {
     Write-Progress -Activity "Validating queries" -Status "$i/$total ($pct%) - $($q.category)" -PercentComplete $pct
 
     $result = [PSCustomObject]@{
-        guid        = $q.guid
-        category    = $q.category
-        subcategory = $q.subcategory
-        severity    = $q.severity
-        text        = $q.text
-        status      = ""
-        rowCount    = 0
-        error       = ""
-        query       = $q.graph
+        guid           = $q.guid
+        category       = $q.category
+        subcategory    = $q.subcategory
+        severity       = $q.severity
+        text           = $q.text
+        status         = ""
+        rowCount       = 0
+        error          = ""
+        evidenceSample = ""
+        query          = $q.graph
     }
 
     try {
-        $graphResult = Search-AzGraph -Query $q.graph @graphParams -First 1000 -ErrorAction Stop
-        $result.rowCount = $graphResult.Count
-        if ($graphResult.Count -eq 0) {
+        # Paginate via SkipToken to avoid silent -First 1000 truncation
+        $allData = [System.Collections.ArrayList]::new()
+        $skipToken = $null
+        do {
+            $pageParams = @{ Query = $q.graph; First = 1000; ErrorAction = 'Stop' }
+            if ($SubscriptionId)  { $pageParams['Subscription']    = @($SubscriptionId) }
+            if ($ManagementGroup) { $pageParams['ManagementGroup'] = $ManagementGroup }
+            if ($skipToken)       { $pageParams['SkipToken']       = $skipToken }
+            $page = Search-AzGraph @pageParams
+            $pageRows = if ($page.Data -is [System.Data.DataTable]) { $page.Data.Rows } else { @($page.Data) }
+            foreach ($row in $pageRows) { [void]$allData.Add($row) }
+            $skipToken = $page.SkipToken
+        } while ($skipToken)
+        $n = $allData.Count
+        $result.rowCount = $n
+        if ($n -eq 0) {
             $result.status = "EMPTY"
             $empty++
         } else {
             $result.status = "OK"
             $success++
         }
+        # Cap evidence sample
+        $sample = ($allData | Select-Object -First 3 | ConvertTo-Json -Compress -Depth 3)
+        if ($sample.Length -gt 500) { $sample = $sample.Substring(0, 497) + '...' }
+        $result.evidenceSample = $sample
     } catch {
+        if ($_.Exception.Message -match 'token|auth|401|expired|credentials|AADSTS') {
+            Write-Error "FATAL: Auth failure at query $i. Token may have expired. Re-authenticate and re-run."
+            $results | Export-Csv -Path $OutputFile -NoTypeInformation -Encoding UTF8
+            exit 2
+        }
         $result.status = "ERROR"
         $result.error = $_.Exception.Message -replace "`n|`r", " "
         $failed++
