@@ -71,7 +71,7 @@ param(
     [string]$ClientSecret,
 
     [Parameter(Mandatory=$false)]
-    [string]$CertificatePath
+    [string]$CertificatePath,
     [Parameter(Mandatory=$false)]
     [ValidateSet('CSV','Markdown','HTML','All')]
     [string]$ReportFormat = 'CSV'
