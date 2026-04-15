@@ -63,7 +63,7 @@ Warning: Store secrets in a key vault or GitHub secret - never in plaintext.
 `Invoke-GraphApi.ps1` checks Entra ID signals that are not available through Azure Resource Graph.
 It reuses the same auth parameters as `Validate-Queries.ps1` and obtains a separate Graph bearer token.
 
-### Required Microsoft Graph permissions (application — admin consent required)
+### Required Microsoft Graph permissions (application ÔÇö admin consent required)
 
 | Permission | Type | Purpose |
 |-----------|------|---------|
@@ -74,6 +74,18 @@ It reuses the same auth parameters as `Validate-Queries.ps1` and obtains a separ
 > **Note:** `Policy.Read.All` and `RoleManagement.Read.Directory` require admin consent.
 > The module gracefully returns `status=SKIP` with an explanation if permissions are missing,
 > so the rest of the validation run is never blocked.
+
+## Cost Management (`scripts/Invoke-CostManagementApi.ps1`)
+
+`Invoke-CostManagementApi.ps1` queries Azure Cost Management REST API and Azure Resource Graph
+to assess budget and cost governance posture. It uses the same auth parameters as `Validate-Queries.ps1`.
+
+### Required Azure permissions
+
+| Role | Scope | Purpose |
+|------|-------|---------|
+| Cost Management Reader | Subscription or Management Group | Read budgets, budget alerts, and anomaly scheduled actions |
+| Reader | Subscription or Management Group | Azure Resource Graph queries (orphaned resource checks) |
 
 ### Granting permissions
 
@@ -94,9 +106,9 @@ az ad app permission admin-consent --id <client-id>
 ### Token acquisition for Graph
 
 The module uses the following priority order to obtain a Graph token:
-1. **Explicit SPN with client secret** (`-TenantId` + `-ClientId` + `-ClientSecret`) — direct `/token` call
-2. **Az module ambient context** — `Get-AzAccessToken -ResourceUrl https://graph.microsoft.com`
-3. **WIF / OIDC** — `AZURE_FEDERATED_TOKEN_FILE` + `AZURE_CLIENT_ID` + `AZURE_TENANT_ID` environment variables
+1. **Explicit SPN with client secret** (`-TenantId` + `-ClientId` + `-ClientSecret`) ÔÇö direct `/token` call
+2. **Az module ambient context** ÔÇö `Get-AzAccessToken -ResourceUrl https://graph.microsoft.com`
+3. **WIF / OIDC** ÔÇö `AZURE_FEDERATED_TOKEN_FILE` + `AZURE_CLIENT_ID` + `AZURE_TENANT_ID` environment variables
 
 If none of these succeed, all Graph checks return `status=SKIP`.
 
@@ -107,13 +119,55 @@ If none of these succeed, all Graph checks return `status=SKIP`.
 | Conditional Access policies enabled | `53e8908a` | `/identity/conditionalAccess/policies` | findEvidence |
 | CA policies with MFA grant | `1049d403` | `/identity/conditionalAccess/policies` | findEvidence |
 | PIM eligible role schedules | `14658d35` | `/roleManagement/directory/roleEligibilitySchedules` | findEvidence |
-| Break-glass / emergency accounts | `984a859c` | `/users?$filter=startswith(displayName,'break')…` | findEvidence |
+| Break-glass / emergency accounts | `984a859c` | `/users?$filter=startswith(displayName,'break')ÔÇª` | findEvidence |
 | Security defaults enforcement | *(identity hardening)* | `/policies/identitySecurityDefaultsEnforcementPolicy` | findEvidence |
 | Named locations / trusted IPs | *(CA support)* | `/identity/conditionalAccess/namedLocations` | findEvidence |
 | Permanent Global Admin assignments | `d98d954d` | `/roleManagement/directory/roleAssignments` | findViolations |
 
-## Future: Cost Management, GitHub/ADO
+
+# Cost Management Reader at subscription scope
+az role assignment create \
+  --role "Cost Management Reader" \
+  --assignee <principal-id> \
+  --scope /subscriptions/<subscription-id>
+
+# Cost Management Reader at Management Group scope
+az role assignment create \
+  --role "Cost Management Reader" \
+  --assignee <principal-id> \
+  --scope /providers/Microsoft.Management/managementGroups/<mg-id>
+```
+
+### Usage examples
+
+```powershell
+# Subscription scope
+.\scripts\Invoke-CostManagementApi.ps1 -SubscriptionId "<subscription-id>"
+
+# Management Group scope with Managed Identity
+.\scripts\Invoke-CostManagementApi.ps1 -ManagementGroup "alz-root" -UseIdentity
+
+# SPN with certificate
+.\scripts\Invoke-CostManagementApi.ps1 -ManagementGroup "alz-root" `
+    -TenantId <tid> -ClientId <cid> -CertificatePath ./cert.pfx
+```
+
+### Checks implemented
+
+| Check | queryIntent | API endpoint |
+|-------|-------------|-------------|
+| Budgets present | findEvidence | `Microsoft.Consumption/budgets` |
+| Budget alert notifications configured | findEvidence | `Microsoft.Consumption/budgets` |
+| Budget threshold exceeded (>= 80%) | findViolations | `Microsoft.Consumption/budgets` |
+| Cost anomaly alerts enabled | findEvidence | `Microsoft.CostManagement/scheduledActions` |
+| Orphaned managed disks | findViolations | Azure Resource Graph |
+| Orphaned public IP addresses | findViolations | Azure Resource Graph |
+
+> **Note:** If the identity lacks Cost Management Reader, individual checks gracefully return
+> `status='SKIP'` rather than failing the entire run.
+
+## Future: Microsoft Graph, GitHub/ADO
 
 Additional modules planned:
-- **Cost Management**: `Cost Management Reader` at subscription or MG scope
+- **Graph API**: `Policy.Read.All`, `RoleManagement.Read.Directory`, `Reports.Read.All`, `Directory.Read.All` (admin consent required)
 - **GitHub API**: `gh auth login` with `repo:read` scope
