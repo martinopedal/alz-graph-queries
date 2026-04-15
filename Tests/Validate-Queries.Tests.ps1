@@ -127,15 +127,17 @@ Describe 'Validate-Queries.ps1 script syntax' {
 }
 
 Describe 'scripts/ syntax validation' {
-    # $PSScriptRoot is available at Pester discovery time; $script:RepoRoot is set in BeforeAll and is not
+    # Compute test cases at discovery time using $PSScriptRoot (available immediately).
+    # Use -ForEach with hashtables so $FileName/$FilePath are injected into each It body at run-time.
     $scriptsDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts'
-    $scriptFiles = Get-ChildItem -Path $scriptsDir -Filter '*.ps1' -ErrorAction SilentlyContinue
+    $testCases = @(
+        Get-ChildItem -Path $scriptsDir -Filter '*.ps1' -ErrorAction SilentlyContinue |
+            ForEach-Object { @{ FileName = $_.Name; FilePath = $_.FullName } }
+    )
 
-    foreach ($file in $scriptFiles) {
-        It "should parse without errors: $($file.Name)" {
-            $errors = $null
-            $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors)
-            $errors | Should -BeNullOrEmpty -Because "$($file.Name) must be free of syntax errors"
-        }
+    It "should parse without errors: <FileName>" -ForEach $testCases {
+        $errors = $null
+        $null = [System.Management.Automation.Language.Parser]::ParseFile($FilePath, [ref]$null, [ref]$errors)
+        $errors | Should -BeNullOrEmpty -Because "$FileName must be free of syntax errors"
     }
 }
