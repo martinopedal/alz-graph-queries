@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Triage issue via Lead agent
         uses: actions/github-script@v7
@@ -142,44 +144,32 @@ jobs:
               }
             }
 
-            // If not routed to @copilot, use keyword-based routing
+            // If not routed to @copilot, use domain-specific routing
             if (!assignedMember) {
-              for (const member of members) {
-                const role = member.role.toLowerCase();
-                if ((role.includes('frontend') || role.includes('ui')) &&
-                    (issueText.includes('ui') || issueText.includes('frontend') ||
-                     issueText.includes('css') || issueText.includes('component') ||
-                     issueText.includes('button') || issueText.includes('page') ||
-                     issueText.includes('layout') || issueText.includes('design'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to frontend/UI work';
-                  break;
+                // Domain-specific routing based on issue content and routing.md
+                const routingRules = [
+                    // Iris: Entra ID, Graph API, identity, conditional access, PIM, MFA
+                    { keywords: ['entra', 'graph api', 'graph query', 'identity', 'conditional access', 'pim', 'mfa', 'privileged', 'directory', 'aad', 'azure ad', 'rbac', 'role assignment'], squad: 'iris' },
+                    // Sentinel: cost, billing, budget, consumption, spend
+                    { keywords: ['cost', 'billing', 'budget', 'consumption', 'spend', 'invoice', 'reservation', 'savings plan'], squad: 'sentinel' },
+                    // Atlas: KQL, ARG queries, resource graph, policy
+                    { keywords: ['kql', 'kusto', 'resource graph', 'arg', 'query', 'policy', 'compliance check'], squad: 'atlas' },
+                    // Forge: CI, workflows, DevOps, GitHub Actions, ADO, pipelines, auth
+                    { keywords: ['ci', 'workflow', 'github actions', 'pipeline', 'devops', 'ado', 'azure devops', 'auth', 'authentication', 'token'], squad: 'forge' },
+                    // Sage: research, coverage, new checks, analysis
+                    { keywords: ['research', 'coverage', 'new check', 'investigation', 'analysis', 'explore'], squad: 'sage' },
+                ];
+
+                for (const rule of routingRules) {
+                    if (rule.keywords.some(kw => issueText.includes(kw))) {
+                        const matched = members.find(m => m.name.toLowerCase() === rule.squad);
+                        if (matched) {
+                            assignedMember = matched;
+                            triageReason = `Issue domain matches ${rule.squad} routing rules`;
+                            break;
+                        }
+                    }
                 }
-                if ((role.includes('backend') || role.includes('api') || role.includes('server')) &&
-                    (issueText.includes('api') || issueText.includes('backend') ||
-                     issueText.includes('database') || issueText.includes('endpoint') ||
-                     issueText.includes('server') || issueText.includes('auth'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to backend/API work';
-                  break;
-                }
-                if ((role.includes('test') || role.includes('qa') || role.includes('quality')) &&
-                    (issueText.includes('test') || issueText.includes('bug') ||
-                     issueText.includes('fix') || issueText.includes('regression') ||
-                     issueText.includes('coverage'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to testing/quality work';
-                  break;
-                }
-                if ((role.includes('devops') || role.includes('infra') || role.includes('ops')) &&
-                    (issueText.includes('deploy') || issueText.includes('ci') ||
-                     issueText.includes('pipeline') || issueText.includes('docker') ||
-                     issueText.includes('infrastructure'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to DevOps/infrastructure work';
-                  break;
-                }
-              }
             }
 
             // Default to Lead if no routing match
