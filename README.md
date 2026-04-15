@@ -232,6 +232,17 @@ See [PERMISSIONS.md](./PERMISSIONS.md) for full role assignments, Graph API cons
 | `squad-ci.yml` | PR / push | KQL syntax validation + Pester tests |
 | `ci-failure-analysis.yml` | Any workflow failure | Opens `bug` + `squad` issue with log excerpt |
 
+
+
+## Data Sources & Attribution
+
+The ALZ checklist query data in this repository is derived from the
+[Azure Review Checklists](https://github.com/Azure/review-checklists) project
+(© Microsoft Corporation, MIT License).
+
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for full attribution of all
+incorporated open-source tools and data.
+
 ## License
 
 MIT — queries provided as-is for assessment purposes.
