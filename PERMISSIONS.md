@@ -58,11 +58,62 @@ Warning: Store secrets in a key vault or GitHub secret - never in plaintext.
 # Opens browser (Windows/macOS GUI) or shows device code (Linux/SSH/headless)
 ```
 
-## Future: Microsoft Graph, Cost Management, GitHub/ADO
+## Microsoft Graph API (`scripts/Invoke-GraphApi.ps1`)
 
-Additional modules planned in v1.1.0 will require:
-- **Graph API**: `Policy.Read.All`, `RoleManagement.Read.Directory`, `Reports.Read.All`, `Directory.Read.All` (admin consent required)
+`Invoke-GraphApi.ps1` checks Entra ID signals that are not available through Azure Resource Graph.
+It reuses the same auth parameters as `Validate-Queries.ps1` and obtains a separate Graph bearer token.
+
+### Required Microsoft Graph permissions (application — admin consent required)
+
+| Permission | Type | Purpose |
+|-----------|------|---------|
+| `Policy.Read.All` | Application | Read Conditional Access policies |
+| `RoleManagement.Read.Directory` | Application | Read PIM eligible/active role assignments |
+| `Directory.Read.All` | Application | Read user accounts (break-glass detection) |
+
+> **Note:** `Policy.Read.All` and `RoleManagement.Read.Directory` require admin consent.
+> The module gracefully returns `status=SKIP` with an explanation if permissions are missing,
+> so the rest of the validation run is never blocked.
+
+### Granting permissions
+
+```bash
+# Add required API permissions to your App Registration
+az ad app permission add \
+  --id <client-id> \
+  --api 00000003-0000-0000-c000-000000000000 \
+  --api-permissions \
+    9e640839-a198-48fb-8b9a-013fd6f6cbcd=Role \
+    9f891c37-7c93-4c2d-a929-4d25e382e0b9=Role \
+    7ab1d382-f21e-4acd-a863-ba3e13f7da61=Role
+
+# Grant admin consent
+az ad app permission admin-consent --id <client-id>
+```
+
+### Token acquisition for Graph
+
+The module uses the following priority order to obtain a Graph token:
+1. **Explicit SPN with client secret** (`-TenantId` + `-ClientId` + `-ClientSecret`) — direct `/token` call
+2. **Az module ambient context** — `Get-AzAccessToken -ResourceUrl https://graph.microsoft.com`
+3. **WIF / OIDC** — `AZURE_FEDERATED_TOKEN_FILE` + `AZURE_CLIENT_ID` + `AZURE_TENANT_ID` environment variables
+
+If none of these succeed, all Graph checks return `status=SKIP`.
+
+### Checks implemented
+
+| Check | ALZ GUID | Graph endpoint | queryIntent |
+|-------|----------|---------------|-------------|
+| Conditional Access policies enabled | `53e8908a` | `/identity/conditionalAccess/policies` | findEvidence |
+| CA policies with MFA grant | `1049d403` | `/identity/conditionalAccess/policies` | findEvidence |
+| PIM eligible role schedules | `14658d35` | `/roleManagement/directory/roleEligibilitySchedules` | findEvidence |
+| Break-glass / emergency accounts | `984a859c` | `/users?$filter=startswith(displayName,'break')…` | findEvidence |
+| Security defaults enforcement | *(identity hardening)* | `/policies/identitySecurityDefaultsEnforcementPolicy` | findEvidence |
+| Named locations / trusted IPs | *(CA support)* | `/identity/conditionalAccess/namedLocations` | findEvidence |
+| Permanent Global Admin assignments | `d98d954d` | `/roleManagement/directory/roleAssignments` | findViolations |
+
+## Future: Cost Management, GitHub/ADO
+
+Additional modules planned:
 - **Cost Management**: `Cost Management Reader` at subscription or MG scope
 - **GitHub API**: `gh auth login` with `repo:read` scope
-
-Documentation for these will be added when the modules ship.
