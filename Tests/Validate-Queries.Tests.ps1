@@ -127,7 +127,8 @@ Describe 'Validate-Queries.ps1 script syntax' {
 }
 
 Describe 'scripts/ syntax validation' {
-    $scriptsDir = Join-Path $script:RepoRoot 'scripts'
+    # $PSScriptRoot is available at Pester discovery time; $script:RepoRoot is set in BeforeAll and is not
+    $scriptsDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts'
     $scriptFiles = Get-ChildItem -Path $scriptsDir -Filter '*.ps1' -ErrorAction SilentlyContinue
 
     foreach ($file in $scriptFiles) {
