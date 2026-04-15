@@ -310,23 +310,23 @@ $budgetsResp = Invoke-ArmRest -Uri $budgetsUrl -Headers $authHeaders
 if (-not $budgetsResp.Success) {
     $status = if ($budgetsResp.IsPermission) { 'SKIP' } else { 'ERROR' }
     $errMsg = if ($budgetsResp.IsPermission) { "Permission denied ($(($budgetsResp.StatusCode)))): $($budgetsResp.Error)" } else { $budgetsResp.Error }
-    [void]$results.Add((New-CheckResult -CheckKey 'budgets-present'
-        -Subcategory  'Budgets Present'
-        -QueryOrEndpoint $budgetsUrl
-        -QueryIntent  'findEvidence'
-        -Status       $status
-        -CheckError   $errMsg
+    [void]$results.Add((New-CheckResult -CheckKey 'budgets-present' `
+        -Subcategory  'Budgets Present' `
+        -QueryOrEndpoint $budgetsUrl `
+        -QueryIntent  'findEvidence' `
+        -Status       $status `
+        -CheckError   $errMsg `
         -Scope        $scopeLabel))
 } else {
     $budgets = @($budgetsResp.Data.value)
     $status  = if ($budgets.Count -gt 0) { 'OK' } else { 'EMPTY' }
-    [void]$results.Add((New-CheckResult -CheckKey 'budgets-present'
-        -Subcategory   'Budgets Present'
-        -QueryOrEndpoint $budgetsUrl
-        -QueryIntent   'findEvidence'
-        -Status        $status
-        -EvidenceCount $budgets.Count
-        -EvidenceSample (Get-EvidenceSample $budgets)
+    [void]$results.Add((New-CheckResult -CheckKey 'budgets-present' `
+        -Subcategory   'Budgets Present' `
+        -QueryOrEndpoint $budgetsUrl `
+        -QueryIntent   'findEvidence' `
+        -Status        $status `
+        -EvidenceCount $budgets.Count `
+        -EvidenceSample (Get-EvidenceSample $budgets) `
         -Scope         $scopeLabel))
 }
 
@@ -341,23 +341,23 @@ if ($budgetsResp.Success) {
         ($null -ne $notifs) -and (@($notifs.PSObject.Properties).Count -gt 0)
     })
     $status = if ($alertedBudgets.Count -gt 0) { 'OK' } else { 'EMPTY' }
-    [void]$results.Add((New-CheckResult -CheckKey 'budget-alerts-configured'
-        -Subcategory   'Budget Alert Notifications'
-        -QueryOrEndpoint $budgetsUrl
-        -QueryIntent   'findEvidence'
-        -Status        $status
-        -EvidenceCount $alertedBudgets.Count
-        -EvidenceSample (Get-EvidenceSample $alertedBudgets)
+    [void]$results.Add((New-CheckResult -CheckKey 'budget-alerts-configured' `
+        -Subcategory   'Budget Alert Notifications' `
+        -QueryOrEndpoint $budgetsUrl `
+        -QueryIntent   'findEvidence' `
+        -Status        $status `
+        -EvidenceCount $alertedBudgets.Count `
+        -EvidenceSample (Get-EvidenceSample $alertedBudgets) `
         -Scope         $scopeLabel))
 } else {
     # Propagate same status as check 1 (same underlying API call)
     $c1 = $results | Where-Object { $_.subcategory -eq 'Budgets Present' } | Select-Object -Last 1
-    [void]$results.Add((New-CheckResult -CheckKey 'budget-alerts-configured'
-        -Subcategory   'Budget Alert Notifications'
-        -QueryOrEndpoint $budgetsUrl
-        -QueryIntent   'findEvidence'
-        -Status        $c1.status
-        -CheckError    $c1.error
+    [void]$results.Add((New-CheckResult -CheckKey 'budget-alerts-configured' `
+        -Subcategory   'Budget Alert Notifications' `
+        -QueryOrEndpoint $budgetsUrl `
+        -QueryIntent   'findEvidence' `
+        -Status        $c1.status `
+        -CheckError    $c1.error `
         -Scope         $scopeLabel))
 }
 
@@ -374,22 +374,22 @@ if ($budgetsResp.Success) {
         }
     })
     $status = if ($exceeding.Count -gt 0) { 'FAIL' } else { 'OK' }
-    [void]$results.Add((New-CheckResult -CheckKey 'budget-threshold-exceeded'
-        -Subcategory   'Budget Threshold Exceeded (>= 80%)'
-        -QueryOrEndpoint $budgetsUrl
-        -QueryIntent   'findViolations'
-        -Status        $status
-        -EvidenceCount $exceeding.Count
-        -EvidenceSample (Get-EvidenceSample $exceeding)
+    [void]$results.Add((New-CheckResult -CheckKey 'budget-threshold-exceeded' `
+        -Subcategory   'Budget Threshold Exceeded (>= 80%)' `
+        -QueryOrEndpoint $budgetsUrl `
+        -QueryIntent   'findViolations' `
+        -Status        $status `
+        -EvidenceCount $exceeding.Count `
+        -EvidenceSample (Get-EvidenceSample $exceeding) `
         -Scope         $scopeLabel))
 } else {
     $c1 = $results | Where-Object { $_.subcategory -eq 'Budgets Present' } | Select-Object -Last 1
-    [void]$results.Add((New-CheckResult -CheckKey 'budget-threshold-exceeded'
-        -Subcategory   'Budget Threshold Exceeded (>= 80%)'
-        -QueryOrEndpoint $budgetsUrl
-        -QueryIntent   'findViolations'
-        -Status        $c1.status
-        -CheckError    $c1.error
+    [void]$results.Add((New-CheckResult -CheckKey 'budget-threshold-exceeded' `
+        -Subcategory   'Budget Threshold Exceeded (>= 80%)' `
+        -QueryOrEndpoint $budgetsUrl `
+        -QueryIntent   'findViolations' `
+        -Status        $c1.status `
+        -CheckError    $c1.error `
         -Scope         $scopeLabel))
 }
 
@@ -405,24 +405,24 @@ if (-not $scheduledActionsResp.Success) {
     $errMsg = if ($scheduledActionsResp.IsPermission) {
         "Permission denied ($($scheduledActionsResp.StatusCode)): $($scheduledActionsResp.Error)"
     } else { $scheduledActionsResp.Error }
-    [void]$results.Add((New-CheckResult -CheckKey 'cost-anomaly-alerts'
-        -Subcategory   'Cost Anomaly Alerts'
-        -QueryOrEndpoint $scheduledActionsUrl
-        -QueryIntent   'findEvidence'
-        -Status        $status
-        -CheckError    $errMsg
+    [void]$results.Add((New-CheckResult -CheckKey 'cost-anomaly-alerts' `
+        -Subcategory   'Cost Anomaly Alerts' `
+        -QueryOrEndpoint $scheduledActionsUrl `
+        -QueryIntent   'findEvidence' `
+        -Status        $status `
+        -CheckError    $errMsg `
         -Scope         $scopeLabel))
 } else {
     $actions       = @($scheduledActionsResp.Data.value)
     $anomalyAlerts = @($actions | Where-Object { $_.kind -eq 'InsightAlert' })
     $status        = if ($anomalyAlerts.Count -gt 0) { 'OK' } else { 'EMPTY' }
-    [void]$results.Add((New-CheckResult -CheckKey 'cost-anomaly-alerts'
-        -Subcategory   'Cost Anomaly Alerts'
-        -QueryOrEndpoint $scheduledActionsUrl
-        -QueryIntent   'findEvidence'
-        -Status        $status
-        -EvidenceCount $anomalyAlerts.Count
-        -EvidenceSample (Get-EvidenceSample $anomalyAlerts)
+    [void]$results.Add((New-CheckResult -CheckKey 'cost-anomaly-alerts' `
+        -Subcategory   'Cost Anomaly Alerts' `
+        -QueryOrEndpoint $scheduledActionsUrl `
+        -QueryIntent   'findEvidence' `
+        -Status        $status `
+        -EvidenceCount $anomalyAlerts.Count `
+        -EvidenceSample (Get-EvidenceSample $anomalyAlerts) `
         -Scope         $scopeLabel))
 }
 
@@ -453,23 +453,23 @@ $diskResp = Invoke-ArmRest -Uri $argUrl -Headers $authHeaders -Method 'POST' -Bo
 if (-not $diskResp.Success) {
     $status = if ($diskResp.IsPermission) { 'SKIP' } else { 'ERROR' }
     $errMsg = if ($diskResp.IsPermission) { "Permission denied ($($diskResp.StatusCode)): $($diskResp.Error)" } else { $diskResp.Error }
-    [void]$results.Add((New-CheckResult -CheckKey 'orphaned-disks'
-        -Subcategory   'Orphaned Managed Disks'
-        -QueryOrEndpoint $argUrl
-        -QueryIntent   'findViolations'
-        -Status        $status
-        -CheckError    $errMsg
+    [void]$results.Add((New-CheckResult -CheckKey 'orphaned-disks' `
+        -Subcategory   'Orphaned Managed Disks' `
+        -QueryOrEndpoint $argUrl `
+        -QueryIntent   'findViolations' `
+        -Status        $status `
+        -CheckError    $errMsg `
         -Scope         $scopeLabel))
 } else {
     $disks  = @($diskResp.Data.data)
     $status = if ($disks.Count -gt 0) { 'FAIL' } else { 'OK' }
-    [void]$results.Add((New-CheckResult -CheckKey 'orphaned-disks'
-        -Subcategory   'Orphaned Managed Disks'
-        -QueryOrEndpoint $argUrl
-        -QueryIntent   'findViolations'
-        -Status        $status
-        -EvidenceCount $disks.Count
-        -EvidenceSample (Get-EvidenceSample $disks)
+    [void]$results.Add((New-CheckResult -CheckKey 'orphaned-disks' `
+        -Subcategory   'Orphaned Managed Disks' `
+        -QueryOrEndpoint $argUrl `
+        -QueryIntent   'findViolations' `
+        -Status        $status `
+        -EvidenceCount $disks.Count `
+        -EvidenceSample (Get-EvidenceSample $disks) `
         -Scope         $scopeLabel))
 }
 
@@ -489,23 +489,23 @@ $pipResp = Invoke-ArmRest -Uri $argUrl -Headers $authHeaders -Method 'POST' -Bod
 if (-not $pipResp.Success) {
     $status = if ($pipResp.IsPermission) { 'SKIP' } else { 'ERROR' }
     $errMsg = if ($pipResp.IsPermission) { "Permission denied ($($pipResp.StatusCode)): $($pipResp.Error)" } else { $pipResp.Error }
-    [void]$results.Add((New-CheckResult -CheckKey 'orphaned-pips'
-        -Subcategory   'Orphaned Public IP Addresses'
-        -QueryOrEndpoint $argUrl
-        -QueryIntent   'findViolations'
-        -Status        $status
-        -CheckError    $errMsg
+    [void]$results.Add((New-CheckResult -CheckKey 'orphaned-pips' `
+        -Subcategory   'Orphaned Public IP Addresses' `
+        -QueryOrEndpoint $argUrl `
+        -QueryIntent   'findViolations' `
+        -Status        $status `
+        -CheckError    $errMsg `
         -Scope         $scopeLabel))
 } else {
     $pips   = @($pipResp.Data.data)
     $status = if ($pips.Count -gt 0) { 'FAIL' } else { 'OK' }
-    [void]$results.Add((New-CheckResult -CheckKey 'orphaned-pips'
-        -Subcategory   'Orphaned Public IP Addresses'
-        -QueryOrEndpoint $argUrl
-        -QueryIntent   'findViolations'
-        -Status        $status
-        -EvidenceCount $pips.Count
-        -EvidenceSample (Get-EvidenceSample $pips)
+    [void]$results.Add((New-CheckResult -CheckKey 'orphaned-pips' `
+        -Subcategory   'Orphaned Public IP Addresses' `
+        -QueryOrEndpoint $argUrl `
+        -QueryIntent   'findViolations' `
+        -Status        $status `
+        -EvidenceCount $pips.Count `
+        -EvidenceSample (Get-EvidenceSample $pips) `
         -Scope         $scopeLabel))
 }
 
