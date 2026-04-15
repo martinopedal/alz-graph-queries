@@ -15,12 +15,12 @@ jobs:
   sync-labels:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2ebc4969ba044e5a1fc08e67ebc2a5e014 # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
       - name: Parse roster and sync labels
-        uses: actions/github-script@f28e40c7b8b4fefa03c823af1dea4aed5a07cde0 # v7.0.1
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
         with:
           script: |
             const fs = require('fs');
