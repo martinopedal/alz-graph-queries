@@ -8,44 +8,47 @@ All notable changes to this project will be documented here.
 
 ### Added
 
-- **`scripts/Invoke-GraphApi.ps1`** — 7 Microsoft Graph API checks for Entra ID / identity posture:
+- **`-ReportFormat CSV|Markdown|HTML|All`** parameter on `Validate-Queries.ps1` for flexible output;
+  CSV is the default, `All` writes all three in one pass.
+- **`Invoke-AzAuth`** 8-step authentication waterfall: ambient context → interactive browser →
+  device code (`-UseDeviceCode`) → Managed Identity (`-UseIdentity`) → Workload Identity Federation
+  (env vars) → SPN certificate → SPN secret → fail with guidance.
+- **SkipToken pagination** in `Validate-Queries.ps1`: ARG queries returning > 1000 rows are
+  automatically paged to completion.
+- **`queryIntent` field** (`findViolations` / `findEvidence`) on all 132 ARG query items:
+  `findViolations` — rows returned mean non-compliance (FAIL);
+  `findEvidence` — rows returned mean the control exists (PASS).
+- **`scripts/Validate-KqlSyntax.ps1`** — offline KQL validator using the Kusto.Language NuGet
+  package; runs as a required CI gate (`KQL Syntax Validation` job in `squad-ci.yml`).
+- **`scripts/Invoke-GraphApi.ps1`** — 7 Microsoft Graph / Entra ID compliance checks:
   conditional access policies, MFA enforcement, PIM eligible assignments, break-glass accounts,
-  security defaults, named locations, and permanent Global Admin assignments.
-  Returns results in the unified ALZ check contract. Closes #11.
-- **`scripts/Invoke-CostManagementApi.ps1`** — 6 Azure Cost Management API checks for budget
-  governance: budget presence, alert thresholds, threshold-exceeded detection (≥ 80%), cost anomaly
-  alerts, orphaned managed disks, and unused public IPs. Closes #12.
-- **`scripts/Invoke-DevOpsApi.ps1`** — 8 GitHub / Azure DevOps governance checks: branch protection,
+  security defaults, named locations, and permanent Global Admin assignments. Closes #11.
+- **`scripts/Invoke-CostManagementApi.ps1`** — 6 Azure Cost Management governance checks:
+  budget presence, alert thresholds, threshold-exceeded detection (>= 80%), cost anomaly alerts,
+  orphaned managed disks, and unused public IPs. Closes #12.
+- **`scripts/Invoke-DevOpsApi.ps1`** — 8 GitHub / Azure DevOps maturity checks: branch protection,
   required reviewers, secret scanning, Dependabot alerts, CODEOWNERS file presence, ADO branch
   policies, pipeline approvals, and audit log streaming. Closes #9.
-- Pester test suites for all three new modules
-  (`Tests/Invoke-GraphApi.Tests.ps1`, `Tests/Invoke-CostManagementApi.Tests.ps1`,
-  `Tests/Invoke-DevOpsApi.Tests.ps1`) — 86 additional unit tests (25 + 19 + 42).
-- `queryIntent` field (`findViolations` / `findEvidence`) on all 132 ARG query items in
-  `queries/alz_additional_queries.json` for unified result contract semantics.
-- Markdown (`-ReportFormat Markdown`) and HTML (`-ReportFormat HTML`) report output from
-  `Validate-Queries.ps1` via new `Export-MarkdownReport` and `Export-HtmlReport` functions.
-- Authentication waterfall in `Validate-Queries.ps1`: SPN (cert → secret → WIF), Managed Identity,
-  device code, and ambient `Az.Accounts` context via `Invoke-AzAuth`; management-group scope support.
-- `validate-example.yml` — example OIDC workflow showing how to run `Validate-Queries.ps1` in CI.
-- Pester test scaffold and KQL offline validator in `squad-ci.yml` (`PowerShell Tests` +
-  `KQL Syntax Validation` required CI jobs).
-- `PERMISSIONS.md` expanded with Microsoft Graph API, Cost Management, and Azure DevOps
-  permission requirements for all Phase 4 modules.
+- **Pester 5 test suite** (`Tests/Validate-Queries.Tests.ps1`) for core script: auth waterfall,
+  report generation, pagination, and result contract.
+- Pester test suites for all three API modules:
+  `Tests/Invoke-GraphApi.Tests.ps1` (25 tests),
+  `Tests/Invoke-CostManagementApi.Tests.ps1` (19 tests),
+  `Tests/Invoke-DevOpsApi.Tests.ps1` (42 tests).
+- `validate-example.yml` — example OIDC GitHub Actions workflow.
+- `PERMISSIONS.md` — comprehensive permissions reference for ARG, Graph API, Cost Management, and DevOps.
 
 ### Fixed
 
-- Removed stray `>>>>>>>` conflict-marker lines from `process_items.ps1`.
-- Encoding artefacts (`ÔÇö` → `-`) and double-dash (`--` → `-`) style issues in
-  `Validate-Queries.ps1` comments and help text.
-- `throw @"` here-string refactored for cross-platform PowerShell compatibility.
-- Cross-platform path fixes in Pester tests for Linux CI runners.
-- Safe property access in KQL validator (`?.` null-conditional guards).
+- `.Data.Rows.Count` wrapper bug — row count was always returning 1 regardless of actual results.
+- FAIL/OK semantics inverted — non-compliant resources are now correctly flagged as FAIL.
+- Hardcoded absolute paths replaced with `$PSScriptRoot`-relative paths throughout.
+- `$env:TEMP` null on Linux — replaced with `[System.IO.Path]::GetTempPath()`.
 
 ### Changed
 
 - `Validate-Queries.ps1` result objects now include `queryIntent`, `reportSection`,
-  and `findingType` fields for downstream consumption by the Phase 4 modules.
+  and `findingType` fields for downstream consumption by the API modules.
 
 ## [1.0.0] — 2026-04-15
 
