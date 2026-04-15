@@ -2,21 +2,43 @@
 
 How to decide who handles what.
 
-## Routing Table
+## Work Type → Agent
 
 | Work Type | Route To | Examples |
 |-----------|----------|----------|
 | ARG KQL queries | Atlas | New checklist item queries, query fixes, EMPTY/ERROR investigation, `alz_additional_queries.json` changes |
-| Entra ID / Microsoft Graph checks | Iris | Conditional Access, PIM, MFA, emergency accounts, Entra Connect, identity RBAC checks |
+| ARG schema & table research | Atlas | Checking whether a resource type is queryable via ARG, supported tables |
+| Query validation | Atlas | `Validate-Queries.ps1` failures, query syntax issues, scope-aware testing |
+| Entra ID / Microsoft Graph checks | Iris | Conditional Access, PIM, MFA, emergency accounts, Entra Connect, identity RBAC |
+| Graph API permissions | Iris | Required scopes, `PERMISSIONS.md` updates for Graph API |
 | Azure DevOps API checks | Forge | Branch policies, pipelines, service connections, variable groups |
 | GitHub API checks | Forge | Branch protection, secret scanning, Dependabot, CODEOWNERS, Actions workflows |
+| CI/CD & workflow maintenance | Forge | Squad workflows, GitHub Actions YAML, pipeline health |
 | Recommendation aggregation / scoring | Sentinel | Unified output format, severity weighting, azqr integration, report generation |
 | Repository security standards | Sentinel | Secret scanning status, Dependabot alerts, branch protection validation |
 | Pre-build research / tool scouting | Sage | "Does this already exist?", tool bundling candidates, API capability research, breaking-change impact |
 | Issue triage & task decomposition | Lead | All `squad`-labeled issues, design reviews, PR sign-off |
 | Code review | Lead | Review PRs, check quality, enforce conventions |
 | Scope & priorities | Lead | What to build next, trade-offs, cross-agent decisions |
-| Session logging | Scribe | Automatic — never needs routing |
+
+## Module Ownership
+
+| Path | Owner | Notes |
+|------|-------|-------|
+| `queries/` | Atlas | ARG query JSON files — all KQL queries live here |
+| `alz_checklist_full.json` | Atlas | Full ALZ checklist with query mappings |
+| `items_no_query.json` | Atlas | Items without queries — routes to Iris/Forge when non-ARG |
+| `items_without_queries.csv` | Atlas | CSV export of unqueried items |
+| `Validate-Queries.ps1` | Atlas | Query validation script — schema + ARG execution |
+| `process_items.ps1` | Atlas | Checklist item processing pipeline |
+| `Tests/` | Atlas | Pester tests for query validation |
+| `scripts/` | Forge | Automation and helper scripts |
+| `.github/workflows/` | Forge | CI/CD workflows, squad workflows |
+| `PERMISSIONS.md` | Iris | API permission documentation (Graph, ADO, GitHub) |
+| `.squad/` | Lead | Team config, routing, decisions, agent charters |
+| `README.md` | Lead | Project documentation |
+| `CHANGELOG.md` | Lead | Release history |
+| `CONTRIBUTING.md` | Lead | Contribution guidelines |
 
 ## Issue Routing
 
