@@ -116,3 +116,28 @@ Describe 'PSScriptRoot path resolution in process_items.ps1' {
         }
     }
 }
+
+Describe 'Validate-Queries.ps1 script syntax' {
+    It 'should parse without PowerShell syntax errors' {
+        $scriptPath = Join-Path $script:RepoRoot 'Validate-Queries.ps1'
+        $errors = $null
+        $null = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$null, [ref]$errors)
+        $errors | Should -BeNullOrEmpty -Because 'Validate-Queries.ps1 must be free of syntax errors to load'
+    }
+}
+
+Describe 'scripts/ syntax validation' {
+    # Compute test cases at discovery time using $PSScriptRoot (available immediately).
+    # Use -ForEach with hashtables so $FileName/$FilePath are injected into each It body at run-time.
+    $scriptsDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts'
+    $testCases = @(
+        Get-ChildItem -Path $scriptsDir -Filter '*.ps1' -ErrorAction SilentlyContinue |
+            ForEach-Object { @{ FileName = $_.Name; FilePath = $_.FullName } }
+    )
+
+    It "should parse without errors: <FileName>" -ForEach $testCases {
+        $errors = $null
+        $null = [System.Management.Automation.Language.Parser]::ParseFile($FilePath, [ref]$null, [ref]$errors)
+        $errors | Should -BeNullOrEmpty -Because "$FileName must be free of syntax errors"
+    }
+}
