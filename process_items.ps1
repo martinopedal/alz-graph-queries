@@ -1,5 +1,5 @@
 # Read input file
-$items = Get-Content "$PSScriptRoot\items_no_query.json" | ConvertFrom-Json
+$items = Get-Content (Join-Path $PSScriptRoot 'items_no_query.json') | ConvertFrom-Json
 
 # Process each item
 $output = @()
@@ -399,7 +399,7 @@ foreach ($item in $items) {
 }
 
 # Convert to JSON and save
-$output | ConvertTo-Json -Depth 10 | Set-Content "$PSScriptRoot\queries\alz_additional_queries.json" -Encoding UTF8
+$output | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $PSScriptRoot 'queries' 'alz_additional_queries.json') -Encoding UTF8
 
 # Generate summary
 $queryableCount = ($output | Where-Object { $_.queryable }).Count

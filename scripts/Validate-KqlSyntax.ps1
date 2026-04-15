@@ -80,7 +80,7 @@ if (-not (Test-Path $QueriesFile)) {
 
 $root = Get-Content $QueriesFile -Raw | ConvertFrom-Json
 $queries = $root.queries
-$queryable = $queries | Where-Object { $_.graph -and $_.graph.Trim() -ne '' }
+$queryable = $queries | Where-Object { $_.PSObject.Properties['graph'] -and $_.graph.Trim() -ne '' }
 Write-Host "Validating $($queryable.Count) KQL queries from $(Split-Path $QueriesFile -Leaf)"
 
 # --- Step 3: Validate each query ---
