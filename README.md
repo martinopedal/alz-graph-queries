@@ -7,7 +7,10 @@ Azure Resource Graph (ARG) queries for **Azure Landing Zone checklist items** th
 | File | Description |
 |---|---|
 | `queries/alz_additional_queries.json` | 206 checklist items: **132 with new ARG queries**, 74 marked as not queryable via ARG |
-| `Validate-Queries.ps1` | PowerShell script to run all queries against your Azure environment and report results |
+| `Validate-Queries.ps1` | PowerShell script to run all ARG queries against your Azure environment and report results |
+| `scripts/Invoke-GraphApi.ps1` | **[Phase 4]** Microsoft Graph API checks for Entra ID / identity posture (7 checks) |
+| `scripts/Invoke-CostManagementApi.ps1` | **[Phase 4]** Azure Cost Management API checks for budget governance (6 checks) |
+| `scripts/Invoke-DevOpsApi.ps1` | **[Phase 4]** GitHub / Azure DevOps governance checks (8 checks) |
 | `items_no_query.json` | Source data: the 206 original items without queries |
 | `alz_checklist_full.json` | Full ALZ checklist for reference |
 
@@ -31,11 +34,17 @@ Azure Resource Graph (ARG) queries for **Azure Landing Zone checklist items** th
 
 ### Prerequisites
 
+**For ARG validation (`Validate-Queries.ps1`):**
 - PowerShell 7+
 - `Az.ResourceGraph` module (`Install-Module Az.ResourceGraph`)
 - `Az.Accounts` module
 - Logged into Azure (`Connect-AzAccount`)
 - Reader access to subscriptions in scope
+
+**For Phase 4 API modules (optional, additive):**
+- `scripts/Invoke-GraphApi.ps1` — Microsoft Graph `Directory.Read.All` / `Policy.Read.All` (or Global Reader)
+- `scripts/Invoke-CostManagementApi.ps1` — Cost Management Reader on subscription/management group
+- `scripts/Invoke-DevOpsApi.ps1` — GitHub token (`repo:read`) or Azure DevOps PAT (`read` scope)
 
 ### Run validation
 
@@ -71,15 +80,95 @@ The script produces:
 | **EMPTY** | Query executed but returned 0 rows. May mean the resource type doesn't exist in scope (which could itself be a finding). |
 | **ERROR** | Query syntax error or permission issue. The query needs fixing. |
 
-## Why 74 items are not queryable
+## Phase 4 API Modules
 
-Many ALZ checklist items are **organizational, process, or identity-related** and cannot be validated through Azure Resource Graph alone:
+Three companion scripts extend coverage to checklist items that cannot be validated through ARG alone.
 
-- **Entra ID configuration** (conditional access, PIM, MFA) → requires Microsoft Graph API
-- **Billing/enrollment** → requires Cost Management or EA APIs
-- **Process decisions** ("define a plan", "document escalation") → manual review only
-- **DevOps practices** (CI/CD, branching, IaC usage) → requires DevOps platform APIs
-- **On-premises configuration** (ExpressRoute physical links, BFD) → not visible to Azure
+### `scripts/Invoke-GraphApi.ps1` — Entra ID / Microsoft Graph (7 checks)
+
+| Check | Intent |
+|---|---|
+| Conditional Access policies present | findEvidence |
+| MFA enforced via CA policy | findViolations |
+| PIM eligible role assignments configured | findEvidence |
+| Emergency / break-glass accounts present | findEvidence |
+| Security defaults enforcement status | findEvidence |
+| Named locations / trusted IPs defined | findEvidence |
+| Permanent Global Administrator assignments | findViolations |
+
+```powershell
+# Ambient Az context (recommended)
+.\scripts\Invoke-GraphApi.ps1 -TenantId "<tenant-id>"
+
+# SPN with certificate
+.\scripts\Invoke-GraphApi.ps1 -TenantId "<tid>" -ClientId "<appId>" -CertificatePath ".\cert.pfx"
+
+# Managed Identity
+.\scripts\Invoke-GraphApi.ps1 -UseIdentity
+```
+
+### `scripts/Invoke-CostManagementApi.ps1` — Budget governance (6 checks)
+
+| Check | Intent |
+|---|---|
+| Budgets configured at scope | findEvidence |
+| Budget alert thresholds configured | findEvidence |
+| Budget threshold exceeded (≥ 80%) | findViolations |
+| Cost anomaly alert actions present | findEvidence |
+| Orphaned managed disks | findViolations |
+| Unused public IP addresses | findViolations |
+
+```powershell
+# Scope to a subscription
+.\scripts\Invoke-CostManagementApi.ps1 -SubscriptionId "<sub-id>"
+
+# Scope to a management group
+.\scripts\Invoke-CostManagementApi.ps1 -ManagementGroup "<mg-id>"
+
+# SPN authentication
+.\scripts\Invoke-CostManagementApi.ps1 -SubscriptionId "<sub-id>" `
+  -TenantId "<tid>" -ClientId "<appId>" -ClientSecret "<secret>"
+```
+
+### `scripts/Invoke-DevOpsApi.ps1` — DevOps posture (8 checks)
+
+| Check | Platform | Intent |
+|---|---|---|
+| Branch protection on default branch | GitHub | findViolations |
+| Required reviewers on main branch | GitHub | findViolations |
+| Secret scanning enabled | GitHub | findViolations |
+| Dependabot / vulnerability alerts enabled | GitHub | findViolations |
+| CODEOWNERS file present | GitHub | findEvidence |
+| Branch policies on main | Azure DevOps | findViolations |
+| Pipeline environment approvals required | Azure DevOps | findViolations |
+| Audit log streaming enabled | Azure DevOps | findEvidence |
+
+```powershell
+# GitHub checks (token from env GITHUB_TOKEN or gh CLI auth)
+.\scripts\Invoke-DevOpsApi.ps1 -Platform GitHub -Owner "my-org" -Repo "my-repo"
+
+# GitHub with explicit token
+.\scripts\Invoke-DevOpsApi.ps1 -Platform GitHub -Owner "my-org" -Repo "my-repo" `
+  -GitHubToken $env:GITHUB_TOKEN
+
+# Azure DevOps checks
+.\scripts\Invoke-DevOpsApi.ps1 -Platform AzureDevOps `
+  -AdoOrgUrl "https://dev.azure.com/my-org" -AdoPat "<pat>"
+```
+
+All three modules return results in the **unified ALZ check contract** (same `status`, `evidenceCount`, `queryIntent` fields as `Validate-Queries.ps1`) so outputs can be combined into a single compliance report.
+
+## Why 74 items are not queryable via ARG
+
+Many ALZ checklist items are **organizational, process, or identity-related** and cannot be validated through Azure Resource Graph alone. The Phase 4 modules cover the addressable gaps:
+
+| Gap area | Phase 4 coverage |
+|---|---|
+| **Entra ID configuration** (CA policies, PIM, MFA) | `Invoke-GraphApi.ps1` |
+| **Billing / budget governance** | `Invoke-CostManagementApi.ps1` |
+| **DevOps practices** (branch protection, CI/CD) | `Invoke-DevOpsApi.ps1` |
+| **Process decisions** ("define a plan", "document escalation") | Manual review only |
+| **On-premises** (ExpressRoute physical links, BFD) | Not visible to Azure APIs |
 
 ## Integration with review-checklists Excel
 
