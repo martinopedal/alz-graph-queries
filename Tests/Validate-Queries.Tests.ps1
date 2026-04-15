@@ -116,3 +116,25 @@ Describe 'PSScriptRoot path resolution in process_items.ps1' {
         }
     }
 }
+
+Describe 'Validate-Queries.ps1 script syntax' {
+    It 'should parse without PowerShell syntax errors' {
+        $scriptPath = Join-Path $script:RepoRoot 'Validate-Queries.ps1'
+        $errors = $null
+        $null = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$null, [ref]$errors)
+        $errors | Should -BeNullOrEmpty -Because 'Validate-Queries.ps1 must be free of syntax errors to load'
+    }
+}
+
+Describe 'scripts/ syntax validation' {
+    $scriptsDir = Join-Path $script:RepoRoot 'scripts'
+    $scriptFiles = Get-ChildItem -Path $scriptsDir -Filter '*.ps1' -ErrorAction SilentlyContinue
+
+    foreach ($file in $scriptFiles) {
+        It "should parse without errors: $($file.Name)" {
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors)
+            $errors | Should -BeNullOrEmpty -Because "$($file.Name) must be free of syntax errors"
+        }
+    }
+}
