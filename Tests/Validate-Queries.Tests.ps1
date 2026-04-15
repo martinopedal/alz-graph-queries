@@ -19,9 +19,9 @@ BeforeAll {
         function global:Get-AzAccessToken { param($ResourceUrl) return [PSCustomObject]@{ ExpiresOn = [DateTimeOffset]::UtcNow.AddHours(1); Token = 'fake' } }
     }
     
-    $script:RepoRoot = Resolve-Path "$PSScriptRoot\.."
-    $script:QueryFile = Join-Path $script:RepoRoot 'queries\alz_additional_queries.json'
-    $script:TempOutput = Join-Path $env:TEMP 'alz-test-output.csv'
+    $script:RepoRoot  = Split-Path $PSScriptRoot -Parent
+    $script:QueryFile = Join-Path $script:RepoRoot 'queries' 'alz_additional_queries.json'
+    $script:TempOutput = Join-Path ([System.IO.Path]::GetTempPath()) 'alz-test-output.csv'
 }
 
 AfterAll {
@@ -110,7 +110,7 @@ Describe 'Validate-Queries.ps1 rowcount/status logic' {
 
 Describe 'PSScriptRoot path resolution in process_items.ps1' {
     It 'process_items.ps1 should not contain hardcoded C:\git\alz-graph-queries paths' {
-        $content = Get-Content "$script:RepoRoot\process_items.ps1" -Raw -ErrorAction SilentlyContinue
+        $content = Get-Content (Join-Path $script:RepoRoot 'process_items.ps1') -Raw -ErrorAction SilentlyContinue
         if ($content) {
             $content | Should -Not -Match 'C:\\git\\alz-graph-queries' -Because 'hardcoded paths break portability'
         }
