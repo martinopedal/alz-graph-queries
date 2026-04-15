@@ -35,6 +35,8 @@
 
 .PARAMETER CertificatePath
     Path to PFX certificate for SPN authentication.
+.PARAMETER ReportFormat
+    Output report format(s). Valid values: CSV, Markdown, HTML, All. Defaults to CSV.
 
 .EXAMPLE
     .\Validate-Queries.ps1
@@ -42,6 +44,7 @@
     .\Validate-Queries.ps1 -ManagementGroup "my-mg-name"
     .\Validate-Queries.ps1 -UseIdentity -ManagementGroup "my-mg-name"
     .\Validate-Queries.ps1 -TenantId <tid> -ClientId <cid> -CertificatePath ./cert.pfx
+    .\Validate-Queries.ps1 -ReportFormat All
 #>
 
 [CmdletBinding()]
@@ -69,6 +72,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string]$CertificatePath
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('CSV','Markdown','HTML','All')]
+    [string]$ReportFormat = 'CSV'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -79,7 +85,7 @@ function Invoke-AzAuth {
         Auth priority waterfall: explicit params > ambient context > WIF > MI > SPN > interactive > fail
     .NOTES
         Explicit params always override ambient context (Goldeneye G1 fix).
-        Never caches token strings — re-acquires per batch.
+        Never caches token strings ├ö├ç├Â re-acquires per batch.
     #>
     param(
         [switch]$UseIdentity,
@@ -181,6 +187,259 @@ See PERMISSIONS.md for setup instructions for each option.
 }
 
 # --- Prerequisites ---
+# ---------------------------------------------------------------------------
+# Report generation functions
+# ---------------------------------------------------------------------------
+
+function Export-MarkdownReport {
+    param(
+        [Parameter(Mandatory)] $Results,
+        [Parameter(Mandatory)] [string] $OutputPath,
+        [string] $Scope = 'unknown',
+        [string] $Identity = 'unknown',
+        [string] $ToolVersion = '1.1.0'
+    )
+
+    $date = Get-Date -Format 'yyyy-MM-dd HH:mm UTC'
+    $total = $Results.Count
+    $queryable = ($Results | Where-Object { $_.checkType -ne 'None' }).Count
+    $notQueryable = $total - $queryable
+    $ok      = ($Results | Where-Object { $_.status -eq 'OK' }).Count
+    $fail    = ($Results | Where-Object { $_.status -eq 'FAIL' }).Count
+    $empty   = ($Results | Where-Object { $_.status -eq 'EMPTY' }).Count
+    $errors  = ($Results | Where-Object { $_.status -eq 'ERROR' }).Count
+    $skipped = ($Results | Where-Object { $_.status -eq 'SKIPPED' }).Count
+    $coverage = if ($queryable -gt 0) { [math]::Round(($ok + $fail + $empty) / $queryable * 100, 1) } else { 0 }
+
+    $sb = [System.Text.StringBuilder]::new()
+    [void]$sb.AppendLine("# ALZ Validation Report")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("| Field | Value |")
+    [void]$sb.AppendLine("|-------|-------|")
+    [void]$sb.AppendLine("| **Date** | $date |")
+    [void]$sb.AppendLine("| **Identity** | $Identity |")
+    [void]$sb.AppendLine("| **Scope** | $Scope |")
+    [void]$sb.AppendLine("| **Tool version** | $ToolVersion |")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("## Executive Summary")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("| Metric | Count |")
+    [void]$sb.AppendLine("|--------|-------|")
+    [void]$sb.AppendLine("| Total items | $total |")
+    [void]$sb.AppendLine("| Queryable | $queryable |")
+    [void]$sb.AppendLine("| Not queryable | $notQueryable |")
+    [void]$sb.AppendLine("| ├ö┬ú├á OK | $ok |")
+    [void]$sb.AppendLine("| ├ö├ÿ├« FAIL | $fail |")
+    [void]$sb.AppendLine("| ├ö├£┬¼ EMPTY | $empty |")
+    [void]$sb.AppendLine("| ┬¡ãÆ├ÂÔöñ ERROR | $errors |")
+    [void]$sb.AppendLine("| ├ö├à┬í SKIPPED | $skipped |")
+    [void]$sb.AppendLine("| **Coverage** | **$coverage%** |")
+    [void]$sb.AppendLine("")
+
+    [void]$sb.AppendLine("## Results by Category")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("| Category | OK | FAIL | EMPTY | ERROR | SKIPPED |")
+    [void]$sb.AppendLine("|----------|-----|------|-------|-------|---------|")
+    $Results | Group-Object category | Sort-Object Name | ForEach-Object {
+        $cat     = $_.Name
+        $catOk   = ($_.Group | Where-Object { $_.status -eq 'OK' }).Count
+        $catFail = ($_.Group | Where-Object { $_.status -eq 'FAIL' }).Count
+        $catEmp  = ($_.Group | Where-Object { $_.status -eq 'EMPTY' }).Count
+        $catErr  = ($_.Group | Where-Object { $_.status -eq 'ERROR' }).Count
+        $catSkip = ($_.Group | Where-Object { $_.status -eq 'SKIPPED' }).Count
+        [void]$sb.AppendLine("| $cat | $catOk | $catFail | $catEmp | $catErr | $catSkip |")
+    }
+    [void]$sb.AppendLine("")
+
+    $failItems = $Results | Where-Object { $_.status -eq 'FAIL' }
+    if ($failItems) {
+        [void]$sb.AppendLine("## Failed Checks")
+        [void]$sb.AppendLine("")
+        [void]$sb.AppendLine("| GUID | Category | Severity | Description | Evidence Count |")
+        [void]$sb.AppendLine("|------|----------|----------|-------------|----------------|")
+        foreach ($r in $failItems) {
+            $desc = $r.text -replace '\|', '\|'
+            [void]$sb.AppendLine("| $($r.guid) | $($r.category) | $($r.severity) | $desc | $($r.evidenceCount) |")
+        }
+        [void]$sb.AppendLine("")
+    }
+
+    $errorItems = $Results | Where-Object { $_.status -eq 'ERROR' }
+    if ($errorItems) {
+        [void]$sb.AppendLine("## Query Errors")
+        [void]$sb.AppendLine("")
+        [void]$sb.AppendLine("| GUID | Category | Error |")
+        [void]$sb.AppendLine("|------|----------|-------|")
+        foreach ($r in $errorItems) {
+            $err = $r.error -replace '\|', '\|'
+            [void]$sb.AppendLine("| $($r.guid) | $($r.category) | $err |")
+        }
+        [void]$sb.AppendLine("")
+    }
+
+    $notQ = $Results | Where-Object { $_.checkType -eq 'None' }
+    if ($notQ) {
+        [void]$sb.AppendLine("## Not Queryable Items")
+        [void]$sb.AppendLine("")
+        [void]$sb.AppendLine("| GUID | Category | Subcategory | Description |")
+        [void]$sb.AppendLine("|------|----------|-------------|-------------|")
+        foreach ($r in $notQ) {
+            $desc = $r.text -replace '\|', '\|'
+            [void]$sb.AppendLine("| $($r.guid) | $($r.category) | $($r.subcategory) | $desc |")
+        }
+    }
+
+    $sb.ToString() | Out-File -FilePath $OutputPath -Encoding UTF8
+    Write-Host "Markdown report: $OutputPath"
+}
+
+function Export-HtmlReport {
+    param(
+        [Parameter(Mandatory)] $Results,
+        [Parameter(Mandatory)] [string] $OutputPath,
+        [string] $Scope = 'unknown',
+        [string] $Identity = 'unknown',
+        [string] $ToolVersion = '1.1.0'
+    )
+
+    $date      = Get-Date -Format 'yyyy-MM-dd HH:mm UTC'
+    $total     = $Results.Count
+    $ok        = ($Results | Where-Object { $_.status -eq 'OK' }).Count
+    $fail      = ($Results | Where-Object { $_.status -eq 'FAIL' }).Count
+    $empty     = ($Results | Where-Object { $_.status -eq 'EMPTY' }).Count
+    $err       = ($Results | Where-Object { $_.status -eq 'ERROR' }).Count
+    $skip      = ($Results | Where-Object { $_.status -eq 'SKIPPED' }).Count
+    $queryable = ($Results | Where-Object { $_.checkType -ne 'None' }).Count
+    $coverage  = if ($queryable -gt 0) { [math]::Round(($ok + $fail + $empty) / $queryable * 100, 1) } else { 0 }
+
+    $rowsJson = $Results |
+        Select-Object guid, category, subcategory, severity, text, checkType, status, evidenceCount, error |
+        ConvertTo-Json -Compress -Depth 3
+
+    $html = @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ALZ Validation Report ├ö├ç├Â $date</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #f8f9fa; color: #212529; }
+  .header { background: #0078d4; color: white; padding: 24px 32px; }
+  .header h1 { margin: 0 0 8px; font-size: 1.6rem; }
+  .meta { opacity: 0.85; font-size: 0.9rem; }
+  .content { max-width: 1200px; margin: 0 auto; padding: 24px 32px; }
+  .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+  .card { background: white; border-radius: 8px; padding: 16px 20px; min-width: 120px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  .card .val { font-size: 2rem; font-weight: 700; }
+  .card .lbl { font-size: 0.8rem; color: #6c757d; margin-top: 4px; }
+  .card.ok .val { color: #107c10; } .card.fail .val { color: #d13438; }
+  .card.empty .val { color: #6c757d; } .card.err .val { color: #ca5010; }
+  .card.skip .val { color: #8a8886; } .card.cov .val { color: #0078d4; }
+  .filters { background: white; border-radius: 8px; padding: 16px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.1); display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .filters label { font-size: 0.85rem; font-weight: 600; }
+  .filters select, .filters input { padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.85rem; }
+  table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  th { background: #f1f3f5; padding: 10px 14px; text-align: left; font-size: 0.82rem; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; }
+  td { padding: 8px 14px; font-size: 0.82rem; border-bottom: 1px solid #f1f3f5; vertical-align: top; }
+  tr.ok td:first-child { border-left: 3px solid #107c10; }
+  tr.fail td:first-child { border-left: 3px solid #d13438; }
+  tr.empty td:first-child { border-left: 3px solid #6c757d; }
+  tr.error td:first-child { border-left: 3px solid #ca5010; }
+  tr.skipped td:first-child { border-left: 3px solid #8a8886; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .badge-ok { background: #dff6dd; color: #107c10; } .badge-fail { background: #fde7e9; color: #d13438; }
+  .badge-empty { background: #f3f2f1; color: #6c757d; } .badge-error { background: #fff4ce; color: #ca5010; }
+  .badge-skipped { background: #f3f2f1; color: #8a8886; }
+  .severity-high { color: #d13438; font-weight: 600; } .severity-medium { color: #ca5010; } .severity-low { color: #107c10; }
+  @media print { .filters { display: none; } body { background: white; } .card { box-shadow: none; border: 1px solid #dee2e6; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>ALZ Validation Report</h1>
+  <div class="meta">$date &nbsp;|&nbsp; Scope: $Scope &nbsp;|&nbsp; Identity: $Identity &nbsp;|&nbsp; Tool v$ToolVersion</div>
+</div>
+<div class="content">
+  <div class="cards">
+    <div class="card ok"><div class="val">$ok</div><div class="lbl">├ö┬ú├á OK</div></div>
+    <div class="card fail"><div class="val">$fail</div><div class="lbl">├ö├ÿ├« FAIL</div></div>
+    <div class="card empty"><div class="val">$empty</div><div class="lbl">├ö├£┬¼ EMPTY</div></div>
+    <div class="card err"><div class="val">$err</div><div class="lbl">┬¡ãÆ├ÂÔöñ ERROR</div></div>
+    <div class="card skip"><div class="val">$skip</div><div class="lbl">├ö├à┬í SKIPPED</div></div>
+    <div class="card cov"><div class="val">${coverage}%</div><div class="lbl">Coverage</div></div>
+    <div class="card"><div class="val">$total</div><div class="lbl">Total</div></div>
+  </div>
+  <div class="filters">
+    <label>Status:</label>
+    <select id="filterStatus" onchange="applyFilters()">
+      <option value="">All</option>
+      <option>OK</option><option>FAIL</option><option>EMPTY</option><option>ERROR</option><option>SKIPPED</option>
+    </select>
+    <label>Category:</label>
+    <select id="filterCategory" onchange="applyFilters()">
+      <option value="">All categories</option>
+    </select>
+    <label>Search:</label>
+    <input id="filterText" type="text" placeholder="Filter description..." oninput="applyFilters()" style="width:200px">
+    <span id="rowCount" style="font-size:0.82rem;color:#6c757d;margin-left:auto"></span>
+  </div>
+  <table id="resultsTable">
+    <thead>
+      <tr><th>Category</th><th>Severity</th><th>Status</th><th>Description</th><th>Count</th><th>Error</th></tr>
+    </thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+</div>
+<script>
+const DATA = $rowsJson;
+const cats = [...new Set(DATA.map(r=>r.category))].sort();
+const catSel = document.getElementById('filterCategory');
+cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; catSel.appendChild(o); });
+function applyFilters() {
+  const s = document.getElementById('filterStatus').value.toLowerCase();
+  const c = document.getElementById('filterCategory').value.toLowerCase();
+  const t = document.getElementById('filterText').value.toLowerCase();
+  const filtered = DATA.filter(r =>
+    (!s || r.status.toLowerCase() === s) &&
+    (!c || (r.category||'').toLowerCase() === c) &&
+    (!t || (r.text||'').toLowerCase().includes(t) || (r.guid||'').toLowerCase().includes(t))
+  );
+  renderRows(filtered);
+}
+function badge(s) {
+  const cls = {OK:'ok',FAIL:'fail',EMPTY:'empty',ERROR:'error',SKIPPED:'skipped'}[s]||'empty';
+  return '<span class="badge badge-'+cls+'">'+s+'</span>';
+}
+function sev(s) {
+  const cls = {High:'severity-high',Medium:'severity-medium',Low:'severity-low'}[s]||'';
+  return '<span class="'+cls+'">'+(s||'')+'</span>';
+}
+function renderRows(rows) {
+  const tb = document.getElementById('resultsBody');
+  tb.innerHTML = rows.map(r =>
+    '<tr class="'+(r.status||'').toLowerCase()+'">' +
+    '<td>'+escape(r.category)+'<br><small style="color:#6c757d">'+escape(r.subcategory)+'</small></td>' +
+    '<td>'+sev(r.severity)+'</td>' +
+    '<td>'+badge(r.status)+'</td>' +
+    '<td>'+escape(r.text)+'</td>' +
+    '<td>'+(r.evidenceCount||0)+'</td>' +
+    '<td><small style="color:#ca5010">'+escape(r.error||'')+'</small></td>' +
+    '</tr>'
+  ).join('');
+  document.getElementById('rowCount').textContent = rows.length + ' of ' + DATA.length + ' items';
+}
+function escape(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+applyFilters();
+</script>
+</body>
+</html>
+"@
+    $html | Out-File -FilePath $OutputPath -Encoding UTF8
+    Write-Host "HTML report: $OutputPath"
+}
+
+# ---------------------------------------------------------------------------
 Write-Host "=== ALZ Graph Query Validator ===" -ForegroundColor Cyan
 Write-Host ""
 
@@ -226,7 +485,18 @@ try {
     $tok = Get-AzAccessToken -ResourceUrl 'https://management.azure.com' -ErrorAction Stop
     $remainingMin = ($tok.ExpiresOn - [DateTimeOffset]::UtcNow).TotalMinutes
     if ($remainingMin -lt 15) {
-        Write-Warning "Azure token expires in $([math]::Round($remainingMin,0)) min — consider re-authenticating before a full run."
+        Write-Warning "Azure token expires in $([math]::Round($remainingMin,0)) min ├ö├ç├Â consider re-authenticating before a full run."
+    }
+} catch {
+    Write-Warning "Could not check token expiry: $($_.Exception.Message)"
+}
+
+# Pre-flight token expiry check
+try {
+    $tok = Get-AzAccessToken -ResourceUrl 'https://management.azure.com' -ErrorAction Stop
+    $remainingMin = ($tok.ExpiresOn - [DateTimeOffset]::UtcNow).TotalMinutes
+    if ($remainingMin -lt 15) {
+        Write-Warning "Azure token expires in $([math]::Round($remainingMin,0)) min ├ö├ç├Â consider re-authenticating before a full run."
     }
 } catch {
     Write-Warning "Could not check token expiry: $($_.Exception.Message)"
@@ -258,29 +528,37 @@ if ($ManagementGroup) {
 }
 
 # --- Run queries ---
-$results = [System.Collections.ArrayList]::new()
-$success = 0
-$failed = 0
-$empty = 0
-$total = $queryable.Count
-$i = 0
+$results   = [System.Collections.ArrayList]::new()
+$success   = 0
+$failures  = 0
+$empty     = 0
+$errors_ct = 0
+$skipped   = 0
+$total     = $queryable.Count
+$i         = 0
+$scopeLabel = if ($ManagementGroup) { "MG:$ManagementGroup" } elseif ($SubscriptionId) { "Sub:$SubscriptionId" } else { 'global' }
 
 foreach ($q in $queryable) {
     $i++
     $pct = [math]::Round(($i / $total) * 100)
     Write-Progress -Activity "Validating queries" -Status "$i/$total ($pct%) - $($q.category)" -PercentComplete $pct
 
+    $queryIntent = if ($q.queryIntent) { $q.queryIntent } else { 'findViolations' }
+
     $result = [PSCustomObject]@{
-        guid           = $q.guid
-        category       = $q.category
-        subcategory    = $q.subcategory
-        severity       = $q.severity
-        text           = $q.text
-        status         = ""
-        rowCount       = 0
-        error          = ""
-        evidenceSample = ""
-        query          = $q.graph
+        guid            = $q.guid
+        category        = $q.category
+        subcategory     = $q.subcategory
+        severity        = $q.severity
+        text            = $q.text
+        checkType       = 'ARG'
+        queryOrEndpoint = $q.graph
+        queryIntent     = $queryIntent
+        status          = ""
+        evidenceCount   = 0
+        evidenceSample  = ""
+        error           = ""
+        scope           = $scopeLabel
     }
 
     try {
@@ -297,18 +575,21 @@ foreach ($q in $queryable) {
             foreach ($row in $pageRows) { [void]$allData.Add($row) }
             $skipToken = $page.SkipToken
         } while ($skipToken)
+
         $n = $allData.Count
-        $result.rowCount = $n
-        if ($n -eq 0) {
-            $result.status = "EMPTY"
-            $empty++
+        $result.evidenceCount = $n
+
+        if ($queryIntent -eq 'findEvidence') {
+            if ($n -eq 0) { $result.status = "EMPTY"; $empty++ }
+            else          { $result.status = "OK";    $success++ }
         } else {
-            $result.status = "OK"
-            $success++
+            # findViolations (default): rows > 0 means violations found = FAIL
+            if ($n -eq 0) { $result.status = "OK";   $success++ }
+            else          { $result.status = "FAIL";  $failures++ }
         }
-        # Cap evidence sample
+
         $sample = ($allData | Select-Object -First 3 | ConvertTo-Json -Compress -Depth 3)
-        if ($sample.Length -gt 500) { $sample = $sample.Substring(0, 497) + '...' }
+        if ($sample -and $sample.Length -gt 500) { $sample = $sample.Substring(0, 497) + '...' }
         $result.evidenceSample = $sample
     } catch {
         if ($_.Exception.Message -match 'token|auth|401|expired|credentials|AADSTS') {
@@ -317,11 +598,33 @@ foreach ($q in $queryable) {
             exit 2
         }
         $result.status = "ERROR"
-        $result.error = $_.Exception.Message -replace "`n|`r", " "
-        $failed++
+        $result.error  = $_.Exception.Message -replace "`n|`r", " "
+        $errors_ct++
     }
 
     [void]$results.Add($result)
+}
+
+# --- Append non-queryable items to unified results ---
+$nonQueryableItems = $allQueries | Where-Object { $_.queryable -eq $false }
+foreach ($q in $nonQueryableItems) {
+    $result = [PSCustomObject]@{
+        guid            = $q.guid
+        category        = $q.category
+        subcategory     = $q.subcategory
+        severity        = $q.severity
+        text            = $q.text
+        checkType       = 'None'
+        queryOrEndpoint = ""
+        queryIntent     = ""
+        status          = "SKIPPED"
+        evidenceCount   = 0
+        evidenceSample  = ""
+        error           = ""
+        scope           = $scopeLabel
+    }
+    [void]$results.Add($result)
+    $skipped++
 }
 
 Write-Progress -Activity "Validating queries" -Completed
@@ -329,27 +632,30 @@ Write-Progress -Activity "Validating queries" -Completed
 # --- Summary ---
 Write-Host ""
 Write-Host "=== Validation Summary ===" -ForegroundColor Cyan
-Write-Host "  Total queryable items: $total" -ForegroundColor White
-Write-Host "  OK (returned rows):    $success" -ForegroundColor Green
-Write-Host "  EMPTY (valid, 0 rows): $empty" -ForegroundColor Yellow
-Write-Host "  ERROR (query failed):  $failed" -ForegroundColor Red
+Write-Host "  Total queryable items: $total"    -ForegroundColor White
+Write-Host "  OK (no violations):    $success"  -ForegroundColor Green
+Write-Host "  FAIL (violations found): $failures" -ForegroundColor Red
+Write-Host "  EMPTY (valid, 0 rows): $empty"    -ForegroundColor Yellow
+Write-Host "  ERROR (query failed):  $errors_ct" -ForegroundColor Red
+Write-Host "  SKIPPED (not queryable): $skipped" -ForegroundColor Gray
 Write-Host ""
 
 # --- Category breakdown ---
 Write-Host "=== Results by Category ===" -ForegroundColor Cyan
-$results | Group-Object -Property category | ForEach-Object {
-    $catOk = ($_.Group | Where-Object { $_.status -eq 'OK' }).Count
-    $catEmpty = ($_.Group | Where-Object { $_.status -eq 'EMPTY' }).Count
-    $catErr = ($_.Group | Where-Object { $_.status -eq 'ERROR' }).Count
-    Write-Host "  $($_.Name): OK=$catOk, Empty=$catEmpty, Error=$catErr"
+$results | Where-Object { $_.checkType -ne 'None' } | Group-Object -Property category | ForEach-Object {
+    $catOk   = ($_.Group | Where-Object { $_.status -eq 'OK' }).Count
+    $catFail = ($_.Group | Where-Object { $_.status -eq 'FAIL' }).Count
+    $catEmp  = ($_.Group | Where-Object { $_.status -eq 'EMPTY' }).Count
+    $catErr  = ($_.Group | Where-Object { $_.status -eq 'ERROR' }).Count
+    Write-Host "  $($_.Name): OK=$catOk, FAIL=$catFail, Empty=$catEmp, Error=$catErr"
 }
 
 # --- Show errors ---
-$errors = $results | Where-Object { $_.status -eq 'ERROR' }
-if ($errors.Count -gt 0) {
+$queryErrors = $results | Where-Object { $_.status -eq 'ERROR' }
+if ($queryErrors.Count -gt 0) {
     Write-Host ""
     Write-Host "=== Failed Queries ===" -ForegroundColor Red
-    foreach ($e in $errors) {
+    foreach ($e in $queryErrors) {
         Write-Host "  [$($e.guid)] $($e.text.Substring(0, [Math]::Min(80, $e.text.Length)))" -ForegroundColor Yellow
         Write-Host "    Error: $($e.error.Substring(0, [Math]::Min(200, $e.error.Length)))" -ForegroundColor Red
         Write-Host ""
@@ -360,11 +666,20 @@ if ($errors.Count -gt 0) {
 $results | Export-Csv -Path $OutputFile -NoTypeInformation -Encoding UTF8
 Write-Host "Results exported to: $OutputFile" -ForegroundColor Cyan
 
-# --- Also export non-queryable items for reference ---
-$nonQueryable = $allQueries | Where-Object { $_.queryable -eq $false }
-$nonQueryable | Select-Object guid, category, subcategory, severity, text, reason |
-    Export-Csv -Path ($OutputFile -replace '\.csv$', '_not_queryable.csv') -NoTypeInformation -Encoding UTF8
-Write-Host "Non-queryable items exported to: $($OutputFile -replace '\.csv$', '_not_queryable.csv')" -ForegroundColor Cyan
+# --- Generate additional report formats ---
+$identity = try { (Get-AzContext).Account.Id } catch { 'unknown' }
+$scope    = $scopeLabel
+
+$basePath = [System.IO.Path]::ChangeExtension($OutputFile, $null).TrimEnd('.')
+
+if ($ReportFormat -in @('Markdown', 'All')) {
+    $mdPath = $basePath + '.md'
+    Export-MarkdownReport -Results $results -OutputPath $mdPath -Scope $scope -Identity $identity
+}
+if ($ReportFormat -in @('HTML', 'All')) {
+    $htmlPath = $basePath + '.html'
+    Export-HtmlReport -Results $results -OutputPath $htmlPath -Scope $scope -Identity $identity
+}
 
 Write-Host ""
-Write-Host "Done! Review validation_results.csv for full details." -ForegroundColor Green
+Write-Host "Done!" -ForegroundColor Green
