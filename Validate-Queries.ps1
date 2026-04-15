@@ -18,10 +18,30 @@
 .PARAMETER ManagementGroup
     Optional. Scope queries to a management group.
 
+.PARAMETER UseIdentity
+    Use system-assigned Managed Identity for authentication.
+
+.PARAMETER UseDeviceCode
+    Force interactive device code flow for authentication.
+
+.PARAMETER TenantId
+    Azure tenant ID for SPN or explicit authentication.
+
+.PARAMETER ClientId
+    Application (client) ID for SPN authentication.
+
+.PARAMETER ClientSecret
+    Client secret for SPN authentication (legacy; prefer certificate or WIF).
+
+.PARAMETER CertificatePath
+    Path to PFX certificate for SPN authentication.
+
 .EXAMPLE
     .\Validate-Queries.ps1
     .\Validate-Queries.ps1 -SubscriptionId "00000000-0000-0000-0000-000000000000"
     .\Validate-Queries.ps1 -ManagementGroup "my-mg-name"
+    .\Validate-Queries.ps1 -UseIdentity -ManagementGroup "my-mg-name"
+    .\Validate-Queries.ps1 -TenantId <tid> -ClientId <cid> -CertificatePath ./cert.pfx
 #>
 
 [CmdletBinding()]
@@ -29,10 +49,136 @@ param(
     [string]$QueriesFile = "$PSScriptRoot\queries\alz_additional_queries.json",
     [string]$OutputFile = "$PSScriptRoot\validation_results.csv",
     [string]$SubscriptionId,
-    [string]$ManagementGroup
+    [string]$ManagementGroup,
+
+    # --- Auth parameters ---
+    [Parameter(Mandatory=$false, HelpMessage='Use system-assigned Managed Identity')]
+    [switch]$UseIdentity,
+
+    [Parameter(Mandatory=$false, HelpMessage='Force interactive device code flow')]
+    [switch]$UseDeviceCode,
+
+    [Parameter(Mandatory=$false)]
+    [string]$TenantId,
+
+    [Parameter(Mandatory=$false)]
+    [string]$ClientId,
+
+    [Parameter(Mandatory=$false)]
+    [string]$ClientSecret,
+
+    [Parameter(Mandatory=$false)]
+    [string]$CertificatePath
 )
 
 $ErrorActionPreference = 'Continue'
+
+function Invoke-AzAuth {
+    <#
+    .SYNOPSIS
+        Auth priority waterfall: explicit params > ambient context > WIF > MI > SPN > interactive > fail
+    .NOTES
+        Explicit params always override ambient context (Goldeneye G1 fix).
+        Never caches token strings — re-acquires per batch.
+    #>
+    param(
+        [switch]$UseIdentity,
+        [switch]$UseDeviceCode,
+        [string]$TenantId,
+        [string]$ClientId,
+        [string]$ClientSecret,
+        [string]$CertificatePath
+    )
+
+    $hasExplicitParams = $UseIdentity -or $UseDeviceCode -or $TenantId -or $ClientId
+
+    # Step 1: Reuse ambient context only when NO explicit auth params supplied
+    if (-not $hasExplicitParams) {
+        $ctx = Get-AzContext -ErrorAction SilentlyContinue
+        if ($ctx) {
+            Write-Host "Using existing Azure context: $($ctx.Account.Id) (tenant: $($ctx.Tenant.Id))"
+            return
+        }
+    }
+
+    # Step 2: WIF/federated credentials (auto-detected from environment)
+    if (-not $hasExplicitParams -and
+        $env:AZURE_FEDERATED_TOKEN_FILE -and
+        $env:AZURE_CLIENT_ID -and
+        $env:AZURE_TENANT_ID) {
+        Write-Host "Detected WIF environment variables -- authenticating with federated token"
+        $federatedToken = Get-Content -Raw $env:AZURE_FEDERATED_TOKEN_FILE
+        Connect-AzAccount -ApplicationId $env:AZURE_CLIENT_ID `
+                          -TenantId $env:AZURE_TENANT_ID `
+                          -FederatedToken $federatedToken `
+                          -ErrorAction Stop | Out-Null
+        Write-Host "Authenticated via WIF (client: $($env:AZURE_CLIENT_ID))"
+        return
+    }
+
+    # Step 3: Explicit -UseIdentity (Managed Identity)
+    if ($UseIdentity) {
+        Write-Host "Authenticating with Managed Identity"
+        Connect-AzAccount -Identity -ErrorAction Stop | Out-Null
+        Write-Host "Authenticated via Managed Identity"
+        return
+    }
+
+    # Step 4: Explicit SPN with certificate (preferred over secret)
+    if ($TenantId -and $ClientId -and $CertificatePath) {
+        Write-Host "Authenticating as SPN $ClientId with certificate"
+        Connect-AzAccount -ServicePrincipal `
+                          -ApplicationId $ClientId `
+                          -TenantId $TenantId `
+                          -CertificatePath $CertificatePath `
+                          -ErrorAction Stop | Out-Null
+        Write-Host "Authenticated as SPN $ClientId (cert)"
+        return
+    }
+
+    # Step 5: Explicit SPN with secret (legacy fallback)
+    if ($TenantId -and $ClientId -and $ClientSecret) {
+        Write-Warning "Using SPN with client secret -- consider switching to certificate or WIF for better security"
+        $cred = [PSCredential]::new($ClientId, (ConvertTo-SecureString $ClientSecret -AsPlainText -Force))
+        Connect-AzAccount -ServicePrincipal `
+                          -Credential $cred `
+                          -TenantId $TenantId `
+                          -ErrorAction Stop | Out-Null
+        Write-Host "Authenticated as SPN $ClientId (secret)"
+        return
+    }
+
+    # Step 6: Interactive (adaptive -- browser on GUI, device code on headless)
+    # Detect non-interactive: CI env vars OR redirected stdin
+    $isCI       = $env:GITHUB_ACTIONS -or $env:TF_BUILD -or $env:CI -or $env:SYSTEM_TEAMFOUNDATIONCOLLECTIONURI
+    $isRedirect = [Console]::IsInputRedirected
+
+    if (-not $isCI -and -not $isRedirect) {
+        if ($UseDeviceCode) {
+            Write-Host "Authenticating interactively (device code forced)"
+            Connect-AzAccount -UseDeviceAuthentication -ErrorAction Stop | Out-Null
+        } else {
+            Write-Host "Authenticating interactively (browser or device code, Az adapts)"
+            Connect-AzAccount -ErrorAction Stop | Out-Null
+        }
+        Write-Host "Authenticated interactively: $((Get-AzContext).Account.Id)"
+        return
+    }
+
+    # Step 7: Non-interactive, no auth configured -- fail fast with actionable message
+    $msg = @"
+No Azure context found and non-interactive environment detected.
+Authentication options:
+  (a) -UseIdentity                            -- Managed Identity (VM, ACI, Functions, GHA)
+  (b) Set AZURE_FEDERATED_TOKEN_FILE + AZURE_CLIENT_ID + AZURE_TENANT_ID  -- OIDC/WIF
+  (c) -TenantId + -ClientId + -CertificatePath -- SPN with certificate (recommended)
+  (d) -TenantId + -ClientId + -ClientSecret   -- SPN with secret (legacy)
+  (e) Run Connect-AzAccount before invoking this script
+
+See PERMISSIONS.md for setup instructions for each option.
+"@
+    throw $msg
+}
 
 # --- Prerequisites ---
 Write-Host "=== ALZ Graph Query Validator ===" -ForegroundColor Cyan
@@ -46,16 +192,33 @@ if (-not (Get-Module -ListAvailable -Name Az.ResourceGraph)) {
 }
 Import-Module Az.ResourceGraph -ErrorAction Stop
 
-# Check login
-try {
-    $context = Get-AzContext -ErrorAction Stop
-    if (-not $context) { throw "No context" }
-    Write-Host "Logged in as: $($context.Account.Id)" -ForegroundColor Green
-    Write-Host "Tenant:       $($context.Tenant.Id)"
-    Write-Host "Subscription: $($context.Subscription.Name) ($($context.Subscription.Id))"
-} catch {
-    Write-Host "ERROR: Not logged into Azure. Run Connect-AzAccount first." -ForegroundColor Red
-    exit 1
+# Authenticate
+Invoke-AzAuth -UseIdentity:$UseIdentity -UseDeviceCode:$UseDeviceCode `
+              -TenantId $TenantId -ClientId $ClientId `
+              -ClientSecret $ClientSecret -CertificatePath $CertificatePath
+
+# Display active context for transparency
+$ctx = Get-AzContext
+Write-Host "Active context: $($ctx.Account.Id) | Tenant: $($ctx.Tenant.Id) | Subscription: $($ctx.Subscription.Name)"
+
+if ($ManagementGroup) {
+    Write-Host "Validating Management Group scope visibility..."
+    try {
+        $visibleSubs = Search-AzGraph -Query "resourcecontainers | where type == 'microsoft.resources/subscriptions' | project subscriptionId, name" `
+                                      -ManagementGroup $ManagementGroup -First 1000 -ErrorAction Stop
+        $subCount = if ($visibleSubs.Data -is [System.Data.DataTable]) { $visibleSubs.Data.Rows.Count } else { @($visibleSubs.Data).Count }
+        if ($subCount -eq 0) {
+            Write-Warning "No subscriptions visible under MG '$ManagementGroup'. Check Reader permissions at MG scope."
+        } else {
+            Write-Host "Querying $subCount subscription(s) visible under MG '$ManagementGroup'"
+        }
+    } catch {
+        if ($_.Exception.Message -match 'authorization|forbidden|403|access denied') {
+            Write-Error "Cannot query MG '$ManagementGroup' -- ensure Reader role at MG scope. $($_.Exception.Message)"
+            exit 1
+        }
+        Write-Warning "Could not enumerate subscriptions under MG: $($_.Exception.Message)"
+    }
 }
 
 # Pre-flight token expiry check

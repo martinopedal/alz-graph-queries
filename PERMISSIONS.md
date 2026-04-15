@@ -1,30 +1,68 @@
-# Permissions
+# Permissions & Authentication Guide
 
-All operations in this repository are **read-only**. No Azure resources are created, modified, or deleted.
+This document explains the permissions required to run `Validate-Queries.ps1` and how to authenticate using each supported method.
 
-## Azure permissions required
+## Required Azure Permissions
 
-| Operation | Scope | Role | Notes |
-|---|---|---|---|
-| `Search-AzGraph` (ARG queries) | Subscription or Management Group | Reader | Required to run `Validate-Queries.ps1` |
-| `Connect-AzAccount` | Tenant | None beyond Reader | Authentication only |
+### Minimum (ARG queries only)
+| Role | Scope | Purpose |
+|------|-------|---------|
+| Reader | Management Group or Subscription | Query Azure Resource Graph |
 
-## Minimum role assignment
-
-Assign **Reader** at the management group root (or at each subscription in scope) to the identity running `Validate-Queries.ps1`.
-
-```powershell
-# Example: assign Reader at management group scope
-New-AzRoleAssignment `
-    -ObjectId "<your-object-id>" `
-    -RoleDefinitionName "Reader" `
-    -Scope "/providers/Microsoft.Management/managementGroups/<mg-id>"
+### For Management Group scope
+```
+az role assignment create \
+  --role Reader \
+  --assignee <principal-id> \
+  --scope /providers/Microsoft.Management/managementGroups/<mg-id>
 ```
 
-## No write permissions needed
+## Authentication Methods
 
-`Validate-Queries.ps1` only calls `Search-AzGraph`. It does not use any ARM write operations, does not modify policy, and does not access secrets or credentials.
+### 1. Existing context (simplest for local use)
+```powershell
+Connect-AzAccount           # or: az login + Import-Module Az
+./Validate-Queries.ps1 -ManagementGroup myMG
+```
 
-## Microsoft Graph API (Phase 2)
+### 2. GitHub Actions with OIDC/WIF (recommended for CI)
+1. Create an App Registration in Entra ID
+2. Add a federated credential (GitHub Actions OIDC):
+   - Issuer: `https://token.actions.githubusercontent.com`
+   - Subject: `repo:<org>/<repo>:ref:refs/heads/main` (or use environment)
+3. Assign Reader role at Management Group scope
+4. Add secrets to your repo: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
 
-Phase 2 work ([#11](https://github.com/martinopedal/alz-graph-queries/issues/11)) will require additional Graph API permissions for Entra ID checks. Permissions will be documented when that work is implemented.
+See `.github/workflows/validate-example.yml` for a complete example.
+
+### 3. Managed Identity
+```powershell
+./Validate-Queries.ps1 -UseIdentity -ManagementGroup myMG
+```
+Assign the Reader role to the managed identity's principal ID at MG scope.
+
+### 4. Service Principal with Certificate (recommended for non-WIF)
+```powershell
+./Validate-Queries.ps1 -TenantId <tid> -ClientId <cid> -CertificatePath ./cert.pfx -ManagementGroup myMG
+```
+
+### 5. Service Principal with Secret (legacy)
+```powershell
+./Validate-Queries.ps1 -TenantId <tid> -ClientId <cid> -ClientSecret <secret> -ManagementGroup myMG
+```
+Warning: Store secrets in a key vault or GitHub secret - never in plaintext.
+
+### 6. Interactive (default for local use when no context exists)
+```powershell
+./Validate-Queries.ps1 -ManagementGroup myMG
+# Opens browser (Windows/macOS GUI) or shows device code (Linux/SSH/headless)
+```
+
+## Future: Microsoft Graph, Cost Management, GitHub/ADO
+
+Additional modules planned in v1.1.0 will require:
+- **Graph API**: `Policy.Read.All`, `RoleManagement.Read.Directory`, `Reports.Read.All`, `Directory.Read.All` (admin consent required)
+- **Cost Management**: `Cost Management Reader` at subscription or MG scope
+- **GitHub API**: `gh auth login` with `repo:read` scope
+
+Documentation for these will be added when the modules ship.

@@ -1,6 +1,8 @@
 .DS_Store
 *.log
 validation_results*.csv
+# Cached NuGet tools (downloaded by Validate-KqlSyntax.ps1)
+.tools/
 # Squad: ignore runtime state (logs, inbox, sessions)
 .squad/orchestration-log/
 .squad/log/
