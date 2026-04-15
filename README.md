@@ -236,7 +236,8 @@ See [PERMISSIONS.md](./PERMISSIONS.md) for full role assignments, Graph API cons
 
 ## Data Sources & Attribution
 
-The ALZ checklist query data in this repository is derived from the
+The ALZ checklist query data in this repository (lz_checklist_full.json,
+items_no_query.json, queries/alz_additional_queries.json) is derived from the
 [Azure Review Checklists](https://github.com/Azure/review-checklists) project
 (© Microsoft Corporation, MIT License).
 
