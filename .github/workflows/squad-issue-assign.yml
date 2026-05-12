@@ -19,7 +19,7 @@ jobs:
           persist-credentials: false
 
       - name: Identify assigned memberand trigger work
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7.0.1
         with:
           script: |
             const fs = require('fs');
@@ -119,7 +119,7 @@ jobs:
       # Separate step: assign @copilot using PAT (required for coding agent)
       - name: Assign @copilot coding agent
         if: startsWith(github.event.label.name, 'squad:')
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7.0.1
         with:
           github-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           script: |
