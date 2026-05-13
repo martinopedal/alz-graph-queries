@@ -15,6 +15,37 @@ Validates **Azure Landing Zone (ALZ) checklist items** using Azure Resource Grap
 
 All modules share the same authentication parameters and return results in a unified contract (`status`, `evidenceCount`, `queryIntent`).
 
+## ALZ Coverage
+
+**153 automated checks validate ALZ compliance**, with an additional 74 items requiring manual assessment or external tooling.
+
+### Automated Coverage by Module
+
+| Module | Checks | Focus |
+|---|---|---|
+| Azure Resource Graph (ARG) | 132 | Network, security, governance, management |
+| Microsoft Graph API | 7 | Entra ID, MFA, conditional access, PIM |
+| Cost Management API | 6 | Budget enforcement, cost anomalies, orphaned resources |
+| DevOps APIs | 8 | GitHub / Azure DevOps branch policies, secret scanning |
+
+### Items Not Queryable (74 total)
+
+Items without automated queries are categorized by reason. Assess these through manual review, policy documentation, or organizational process verification:
+
+| Reason | Count | Remediation |
+|---|---|---|
+| Identity / Entra ID / PIM / MFA / organizational access governance | 16 | Review Entra ID security defaults, PIM role assignments, and conditional access policies manually; use `Invoke-GraphApi.ps1` for partial automation (7 checks). |
+| DevOps process / SDLC / pipeline practices | 14 | Evaluate GitHub and Azure DevOps repository settings manually; use `Invoke-DevOpsApi.ps1` (8 checks) for branch protection and approval automation. |
+| Organizational intent / operational practice / external context | 12 | These depend on business decisions and procedures — document your approach and validate with stakeholders. |
+| Billing / cost-management controls | 15 | Review Cost Management and EA settings manually; use `Invoke-CostManagementApi.ps1` (6 checks) for budget and anomaly detection. |
+| Planning / documentation / operational-process requirements | 7 | Establish and document these as part of your ALZ governance processes. |
+| Other (region availability, naming standards, on-premises dependencies, sovereignty, etc.) | 10 | Case-by-case assessment based on your regulatory, geographic, or operational context. |
+
+For items in these categories, use your compliance framework or ALZ governance processes to:
+- Document the business or technical justification
+- Assign an owner for periodic review
+- Integrate findings into your Azure landing zone assessment reports
+
 ## Quick Start
 
 ```powershell
