@@ -96,7 +96,7 @@ Start-Process .\validation_results.html   # or .csv / .md
 | 7 | Service Principal (secret) | CI/CD pipelines (legacy) | `-TenantId`, `-ClientId`, `-ClientSecret` |
 | 8 | Fail with guidance | — | All methods exhausted |
 
-See [PERMISSIONS.md](./PERMISSIONS.md) for role assignments and setup instructions.
+See [PERMISSIONS.md](./PERMISSIONS.md) for role assignments and setup instructions. For Graph API checks with certificate authentication in CI/CD, see [Setting up `scripts/Invoke-GraphApi.ps1` for CI with Certificate Authentication](./PERMISSIONS.md#setting-up-scriptsinvoke-graphapips1-for-ci-with-certificate-authentication).
 
 ## Report Formats
 

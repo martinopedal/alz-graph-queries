@@ -166,8 +166,228 @@ az role assignment create \
 > **Note:** If the identity lacks Cost Management Reader, individual checks gracefully return
 > `status='SKIP'` rather than failing the entire run.
 
+### Setting up `scripts/Invoke-GraphApi.ps1` for CI with Certificate Authentication
+
+This section walks through configuring a service principal with certificate authentication for running Graph API checks in GitHub Actions or Azure Pipelines.
+
+#### Step 1 — Create App Registration
+
+Create an Entra ID application with the required Graph permissions:
+
+```bash
+# Create the application
+az ad app create --display-name "alz-graph-queries-ci"
+# Note the appId from the output
+
+# Store it for later steps
+export APP_ID="<appId-from-previous-output>"
+```
+
+Add the required Microsoft Graph application permissions:
+
+```bash
+# Policy.Read.All — for Conditional Access policies
+az ad app permission add --id $APP_ID --api 00000003-0000-0000-c000-000000000000 \
+  --api-permissions 332a536c-c7ef-4017-ab91-336970924f0d=Role
+
+# RoleManagement.Read.Directory — for PIM eligible role assignments
+az ad app permission add --id $APP_ID --api 00000003-0000-0000-c000-000000000000 \
+  --api-permissions 0e263e50-5827-48a4-b97c-d940288653c7=Role
+
+# Directory.Read.All — for user accounts (break-glass detection)
+az ad app permission add --id $APP_ID --api 00000003-0000-0000-c000-000000000000 \
+  --api-permissions 06da0dbc-49e3-46ad-b81d-440d94be40a5=Role
+```
+
+#### Step 2 — Generate and Upload Certificate
+
+**Option A: PowerShell (Windows)**
+
+```powershell
+$cert = New-SelfSignedCertificate `
+  -CertStoreLocation "cert:\CurrentUser\My" `
+  -Subject "CN=alz-graph-queries-ci" `
+  -KeySpec KeyExchange `
+  -Provider "Microsoft Enhanced RSA and AES Cryptographic Provider v1.0" `
+  -NotAfter (Get-Date).AddYears(2)
+
+# Export to PFX (with password)
+$pwd = ConvertTo-SecureString -String "YourSecurePassword" -Force -AsPlainText
+Export-PfxCertificate -Cert $cert -FilePath "./alz-graph-queries-ci.pfx" -Password $pwd
+
+# For GitHub Actions, base64-encode the cert
+$certBytes = [System.IO.File]::ReadAllBytes("./alz-graph-queries-ci.pfx")
+$certBase64 = [System.Convert]::ToBase64String($certBytes)
+Write-Host $certBase64
+```
+
+**Option B: OpenSSL (cross-platform)**
+
+```bash
+# Generate private key and self-signed certificate (2-year validity)
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 730 \
+  -subj "/CN=alz-graph-queries-ci"
+
+# Convert to PFX
+openssl pkcs12 -export -in cert.pem -inkey key.pem -out alz-graph-queries-ci.pfx \
+  -name "alz-graph-queries-ci" -passout pass:"YourSecurePassword"
+
+# For GitHub Actions, base64-encode the cert
+cat alz-graph-queries-ci.pfx | base64 -w 0 > alz-graph-queries-ci.pfx.b64
+cat alz-graph-queries-ci.pfx.b64
+```
+
+#### Step 3 — Upload Certificate to App Registration
+
+```bash
+az ad app credential create --id $APP_ID \
+  --cert @alz-graph-queries-ci.cer \
+  --display-name "CI certificate"
+```
+
+Or via Azure Portal: App Registration → Certificates & secrets → Certificates → Upload certificate.
+
+#### Step 4 — Grant Admin Consent
+
+```bash
+az ad app permission admin-consent --id $APP_ID
+```
+
+Verify in Azure Portal: App Registration → API permissions → All permissions are showing "Granted for <TenantName>".
+
+#### Step 5 — GitHub Actions Workflow with SPN Certificate
+
+Store these secrets in your GitHub repository:
+
+| Secret | Value |
+|--------|-------|
+| `AZURE_TENANT_ID` | Your Entra ID tenant ID |
+| `AZURE_CLIENT_ID` | The app registration's client ID |
+| `AZURE_CERT_PFX_BASE64` | Base64-encoded PFX certificate (from Step 2) |
+| `AZURE_CERT_PASSWORD` | Certificate password (from Step 2) |
+
+Add this job to your `.github/workflows/alz-validation.yml`:
+
+```yaml
+name: ALZ Validation with Graph API (SPN Certificate)
+
+on:
+  workflow_dispatch:
+    inputs:
+      management_group:
+        description: Management Group ID to scan
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: ALZ Checklist + Graph API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@0b93645e9e0d6c8c991ae992102c6ab17ad27139 # v5.0.2
+        with:
+          python-version: '3.11'
+
+      - name: Decode and stage certificate
+        shell: bash
+        run: |
+          echo "${{ secrets.AZURE_CERT_PFX_BASE64 }}" | base64 -d > /tmp/cert.pfx
+
+      - name: Run ALZ validation + Graph API checks
+        shell: pwsh
+        run: |
+          $params = @{
+            TenantId       = '${{ secrets.AZURE_TENANT_ID }}'
+            ClientId       = '${{ secrets.AZURE_CLIENT_ID }}'
+            CertificatePath = '/tmp/cert.pfx'
+            ManagementGroup = '${{ github.event.inputs.management_group || ''alz-root'' }}'
+            ReportFormat   = 'All'
+          }
+          
+          ./Validate-Queries.ps1 @params
+          
+          # Graph API checks are integrated into Validate-Queries.ps1
+          # Results appear in validation_results.* with all other compliance data
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: alz-validation-reports
+          path: |
+            validation_results.csv
+            validation_results.md
+            validation_results.html
+          retention-days: 30
+```
+
+**Key points:**
+
+- The certificate password is passed inline; use a key vault secret (`${{ secrets.AZURE_CERT_PASSWORD }}`) in production
+- `Invoke-GraphApi.ps1` is automatically invoked by `Validate-Queries.ps1` when Graph credentials are available
+- Graph results are merged into the unified report (CSV, Markdown, HTML)
+- No extra API calls needed; Graph checks run alongside ARG queries
+
+#### Step 6 — Azure Pipelines with Managed Identity (simpler alternative)
+
+If running in Azure Pipelines on an Azure Hosted Agent or self-hosted agent in Azure, use Managed Identity instead:
+
+```yaml
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  - stage: Validate
+    displayName: ALZ Validation
+    jobs:
+      - job: GraphAndArg
+        displayName: ALZ Checklist + Graph API
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: '<service-connection-name>'
+              scriptType: 'pscore'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                $params = @{
+                  UseIdentity     = $true
+                  ManagementGroup = 'alz-root'
+                  ReportFormat    = 'All'
+                }
+                ./Validate-Queries.ps1 @params
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: '$(System.DefaultWorkingDirectory)'
+              artifactName: 'alz-validation-reports'
+              publishLocation: 'Container'
+            condition: always()
+```
+
+Managed Identity is simpler because Azure Pipelines handles credential injection automatically — no certificate upload needed.
+
+#### Troubleshooting
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `AADSTS65001: User or admin has not consented` | Graph permissions lack admin consent | Run Step 4 (`az ad app permission admin-consent`) |
+| `Certificate thumbprint not found` | Cert not imported into the app registration | Re-upload cert via Azure Portal or Step 3 |
+| `AZUREPS_GHACTIONLOGIN_TOKEN_EXPIRED` | Certificate expired (> 2 years old) | Generate a new cert and re-upload |
+| `EAUTH: Certificate verification failed` | Invalid base64 encoding in GitHub secret | Regenerate: `cat cert.pfx \| base64 -w 0` (no newlines) |
+
 ## Future: Microsoft Graph, GitHub/ADO
 
 Additional modules planned:
-- **Graph API**: `Policy.Read.All`, `RoleManagement.Read.Directory`, `Reports.Read.All`, `Directory.Read.All` (admin consent required)
 - **GitHub API**: `gh auth login` with `repo:read` scope
