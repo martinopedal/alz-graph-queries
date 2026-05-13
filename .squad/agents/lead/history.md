@@ -8,6 +8,7 @@
 ## Team Updates
 
 - 2026-05-13: Writing style decision merged into .squad/decisions.md — applies to all docs, READMEs, reports, PR descriptions. See decisions.md.
+- 2026-05-13 (Cross-agent update): Next-up roadmap from 2026-05-13: 3 issues filed (#57, #58, #59), all merged. APRL extraction (Sage) returned Conditional-Go with L effort estimate. Awaiting user direction on whether to file APRL implementation as a follow-up issue.
 
 ## Learnings
 
