@@ -310,3 +310,17 @@ Martin Opedal. Lead Cloud Solution Architect at Microsoft, 14 years experience. 
 - All meaningful changes require team consensus
 - Document architectural decisions here
 - Keep history focused on work, decisions focused on direction
+
+---
+
+## 2026-05-13: APRL implementation scope (user directive)
+
+**By:** martinopedal (via Copilot coordinator)
+
+**Decision:** APRL v2 query extraction work belongs to the **azure-analyzer** scope (Sage's tool registry bundle), not to alz-graph-queries. The research brief at `.squad/aprl-extraction-research.md` (PR #65) is the deliverable for this repo.
+
+**Implications:**
+- Do NOT file an APRL implementation issue in alz-graph-queries
+- alz-graph-queries stays focused on its 153-check ALZ assessment surface (132 ARG + 7 Graph + 6 Cost + 8 DevOps)
+- APRL's 451 queries land in the broader azure-analyzer bundle when that integration becomes active work
+- Sage's tool registry already references this scope split — APRL was always Phase 2 there
