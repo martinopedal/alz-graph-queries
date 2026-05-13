@@ -7,6 +7,7 @@ All notable changes to this project will be documented here.
 ### Documentation
 
 - ALZ coverage summary section added to README, breaking down 153 automated checks vs. 74 non-queryable items by reason category. (#57)
+- Graph SPN certificate authentication walkthrough added to PERMISSIONS.md: Entra ID app registration, cross-platform cert generation, SHA-pinned GitHub Actions example, and Azure Pipelines Managed Identity variant. Includes troubleshooting table. (#59)
 
 ### Changed
 
