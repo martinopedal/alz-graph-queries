@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Documentation
+
+- ALZ coverage summary section added to README, breaking down 153 automated checks vs. 74 non-queryable items by reason category. (#57)
+
 ### Changed
 
 - All GitHub Actions `uses:` directives now SHA-pinned (eliminates bare tag vulnerabilities)
