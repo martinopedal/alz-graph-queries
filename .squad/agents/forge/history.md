@@ -19,6 +19,26 @@
 **CI fix location** - `.github/workflows/ci-failure-analysis.yml`, line 36-37: changed job filter to include both `failure` and `cancelled` conclusions.
 
 **PR opened** - #55 on branch `squad/workflow-remediation-2026-05-13`. Consolidated both Forge and Lead decision proposals into a single remediation PR per repo policy (all CI changes in one atomic commit).
+
+### 2026-05-14: GitHub Script Token Fix (PR #66)
+
+**Bug pattern:** `actions/github-script` requires explicit `github-token` input. When omitted, the action fails with `Input required and not supplied: github-token` during the getInput call at initialization (line 212 in action's entrypoint).
+
+**Audit result:** 7 workflows use `actions/github-script`, all 7 steps were missing the token:
+- `squad-issue-assign.yml` (first step only; second step already had `COPILOT_GITHUB_TOKEN`)
+- `auto-label-issues.yml`
+- `ci-failure-analysis.yml`
+- `squad-heartbeat.yml` (first step only; second step already had `COPILOT_ASSIGN_TOKEN`)
+- `squad-label-enforce.yml`
+- `squad-triage.yml`
+- `sync-squad-labels.yml`
+
+**Root cause:** The action's documentation suggests `github-token` defaults to `${{ github.token }}`, but the implementation requires it to be explicitly supplied via `with:` block. When missing, the action fails before the script runs.
+
+**Fix applied:** Added `github-token: ${{ secrets.GITHUB_TOKEN }}` to all 7 steps. Permissions already correct (all workflows had `issues: write` at job or workflow level).
+
+**PR opened:** #66 on branch `squad/fix-issue-assign-token`. Closes #60, #61, #62 (duplicate CI failure auto-filed issues).
+
 # Project Context
 
 - **Owner:** martinopedal
