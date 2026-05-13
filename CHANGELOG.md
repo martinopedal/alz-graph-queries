@@ -20,6 +20,7 @@ All notable changes to this project will be documented here.
 
 ### Fixed
 
+- Squad-issue-assign workflow and 6 other workflows no longer fail with "Input required and not supplied: github-token" — added explicit `github-token: ${{ secrets.GITHUB_TOKEN }}` input on all `actions/github-script` steps. Fixes #60, #61, #62.
 - Upgraded `azure/powershell@v2` → `v3` in `validate-example.yml` (unblocks Dependabot PR #47)
 
 ## [1.1.0] — 2026-04-15
