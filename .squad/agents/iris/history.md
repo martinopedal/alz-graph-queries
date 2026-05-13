@@ -13,8 +13,6 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
-## Learnings
-
 ### Graph API SPN Certificate Authentication (Issue #59)
 
 **Date:** 2026-05-13
