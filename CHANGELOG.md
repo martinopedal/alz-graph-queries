@@ -4,6 +4,15 @@ All notable changes to this project will be documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- All GitHub Actions `uses:` directives now SHA-pinned (eliminates bare tag vulnerabilities)
+- CI failure analysis now captures cancelled jobs, not just failures (fixes false "Failed jobs: none" issues)
+
+### Fixed
+
+- Upgraded `azure/powershell@v2` → `v3` in `validate-example.yml` (unblocks Dependabot PR #47)
+
 ## [1.1.0] — 2026-04-15
 
 ### Added

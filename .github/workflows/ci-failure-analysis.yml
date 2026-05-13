@@ -34,7 +34,7 @@ jobs:
             });
 
             const failedJobs = jobsResp.data.jobs.filter(
-              j => j.conclusion === 'failure'
+              j => j.conclusion === 'failure' || j.conclusion === 'cancelled'
             );
 
             const jobSections = [];
