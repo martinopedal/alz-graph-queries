@@ -8,6 +8,10 @@ All notable changes to this project will be documented here.
 
 - ALZ coverage summary section added to README, breaking down 153 automated checks vs. 74 non-queryable items by reason category. (#57)
 
+### Research
+
+- APRL v2 query extraction research brief published at `.squad/aprl-extraction-research.md` with schema mapping, 5-query proof of concept, coverage proposal (150-200 queries across Reliability + Performance categories), validation strategy, and effort estimate (Conditional-Go, ~7-10 days). (#58)
+
 ### Changed
 
 - All GitHub Actions `uses:` directives now SHA-pinned (eliminates bare tag vulnerabilities)
